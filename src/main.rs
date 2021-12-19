@@ -1,7 +1,9 @@
 use clap::{App, Arg};
 use serde::{Deserialize, Serialize};
+use num_bigint::BigInt;
 
 use std::collections::HashSet;
+use std::fmt;
 
 #[derive(Debug, PartialEq, Eq)]
 enum Func {
@@ -45,11 +47,51 @@ impl Func {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
-// Todo: Bigint
 enum Object {
     Int(i64),
     List(Vec<Object>),
     Error(String),
+}
+
+impl fmt::Display for Object {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use Object::*;
+        match self {
+            Int(i) => write!(f, "{}", i),
+            List(l) => {
+                write!(f, "[")?;
+                for (index, elem) in l.iter().enumerate() {
+                    if index > 0 {
+                        write!(f, ", ")?
+                    }
+                    write!(f, "{}", elem)?
+                }
+                write!(f, "]")
+            }
+            Error(e) => write!(f, "Error({})", e),
+        }
+    }
+}
+
+impl Object {
+    fn from_str(string: &str) -> Object {
+        use Object::*;
+        assert!(!string.is_empty(), "Object string should not be empty");
+        if string.chars().nth(0).expect("Nonempty") == '[' {
+            assert!(string.chars().rev().nth(0).expect("Nonempty") == ']', "Object string should have matched brackets");
+            let sub_string = &string[1..string.len()-1];
+            let mut sub_vec = vec![];
+            for element_string in sub_string.split(',') {
+                let trimmed = element_string.trim();
+                let sub_elem = Object::from_str(trimmed);
+                sub_vec.push(sub_elem);
+            }
+            List(sub_vec)
+        } else {
+            let integer = string.parse().expect("Nonlist should be int");
+            Int(integer)
+        }
+    }
 }
 
 #[derive(PartialOrd, Ord, PartialEq, Eq)]
@@ -147,9 +189,40 @@ impl BasicFunc {
                         .map(|elem| if let Int(i) = elem { i } else { unreachable!() })
                         .product();
                     Int(total)
+                } else if l.iter().any(|elem| matches!(elem, Error(_))) {
+                    panic!("Product has error in list: {:?}", l);
                 } else {
-                    // Transpose
-                    panic!("Product of list of list not implemented: {:?}", List(l));
+                    let longest = l
+                        .iter()
+                        .map(|elem| match elem {
+                            Int(_) => 1,
+                            List(inner) => inner.len(),
+                            Error(_) => unreachable!("No errors"),
+                        })
+                        .max()
+                        .expect("Empty -> 1");
+                    let mut output = vec![];
+                    for index in 0..longest {
+                        let mut row = vec![];
+                        for elem in &l {
+                            let maybe_to_push = match elem {
+                                a @ Int(_) => {
+                                    if index == 0 {
+                                        Some(a.clone())
+                                    } else {
+                                        None
+                                    }
+                                }
+                                List(inner) => inner.get(index).cloned(),
+                                Error(_) => unreachable!("No errors"),
+                            };
+                            if let Some(to_push) = maybe_to_push {
+                                row.push(to_push)
+                            };
+                        }
+                        output.push(List(row))
+                    }
+                    List(output)
                 }
             }
             (PowerSet, Int(i)) => {
@@ -322,7 +395,7 @@ impl DoubleFunc {
         use Object::*;
         match self {
             While => {
-                let mut working_arg = arg.clone();
+                let mut working_arg = arg;
                 let mut sequence = vec![];
                 loop {
                     if matches!(working_arg, Error(_)) {
@@ -376,6 +449,7 @@ impl DoubleFunc {
 enum BoundToken {
     Bound1,
     BoundQuote,
+    SoloQuote,
 }
 #[derive(Debug)]
 enum HOF {
@@ -386,24 +460,19 @@ enum HOF {
     Quote,
 }
 
-fn parse(mut tokens: Vec<Token>) -> Func {
-    // This is unsatisfying - should really be the first unbound.
-    let num_quotes = tokens
-        .iter()
-        .filter(|elem| matches! {elem, Token::Bound(BoundToken::BoundQuote)})
-        .count();
-    if num_quotes % 2 == 1 {
-        let maybe_index = tokens
-            .iter()
-            .position(|elem| matches! {elem,  Token::Higher(_)});
-        if let Some(index) = maybe_index {
-            tokens.insert(index + 1, Token::Bound(BoundToken::BoundQuote));
-        } else {
-            panic!("Odd quotes, no higher order funcs");
-        }
-    }
+fn parse(tokens: Vec<Token>) -> Func {
     let mut state: Vec<HOF> = vec![];
     for token in tokens {
+        if let Token::Bound(BoundToken::SoloQuote) = &token {
+            assert!(state.iter().all(|elem| !matches!(elem, HOF::Quote)));
+            let maybe_first_unbound_index =
+                state.iter().position(|elem| !matches!(elem, HOF::Func(_)));
+            if let Some(first_unbound_index) = maybe_first_unbound_index {
+                state.insert(first_unbound_index + 1, HOF::Quote)
+            } else {
+                panic!("SoloQuote has no preceeding unbound: {:?}", state);
+            }
+        }
         match token {
             Token::Basic(basic_func) => state.push(HOF::Func(Func::Basic(basic_func))),
             Token::Higher(higher_func) => state.push(HOF::Higher(higher_func)),
@@ -444,7 +513,7 @@ fn parse(mut tokens: Vec<Token>) -> Func {
                     }
                 }
             }
-            Token::Bound(BoundToken::BoundQuote) => {
+            Token::Bound(BoundToken::BoundQuote | BoundToken::SoloQuote) => {
                 let quote_count = state.iter().filter(|hof| matches!(hof, HOF::Quote)).count();
                 assert!(quote_count <= 1);
                 if quote_count == 0 {
@@ -480,7 +549,7 @@ fn parse(mut tokens: Vec<Token>) -> Func {
                                         state.push(HOF::Func(new_func));
                                         break;
                                     }
-                                    // Want to allow btqhhq - not currently working
+                                    // TODO: Want to allow btqhhq - not currently working
                                     _ => panic!(
                                         "Paired quote not before higher or double func {:?}",
                                         last_state
@@ -591,7 +660,8 @@ fn parse(mut tokens: Vec<Token>) -> Func {
     Func::Bound(funcs)
 }
 fn lex(code: &str) -> Vec<Token> {
-    code.chars()
+    let mut tokens: Vec<Token> = code
+        .chars()
         .map(|c| match c {
             'b' => Token::Double(DoubleFunc::Bifurcate),
             'f' => Token::Higher(HigherFunc::Filter),
@@ -609,9 +679,21 @@ fn lex(code: &str) -> Vec<Token> {
             'x' => Token::Higher(HigherFunc::FixedPoint),
             'y' => Token::Basic(BasicFunc::PowerSet),
             'z' => Token::Bound(BoundToken::Bound1),
-            _ => unimplemented!(),
+            _ => unimplemented!("Lex {}", c),
         })
-        .collect()
+        .collect();
+    let num_quote = tokens
+        .iter()
+        .filter(|elem| matches!(elem, Token::Bound(BoundToken::BoundQuote)))
+        .count();
+    if num_quote % 2 == 1 {
+        let solo_index = tokens
+            .iter()
+            .position(|elem| matches!(elem, Token::Bound(BoundToken::BoundQuote)))
+            .expect("Odd means at least one");
+        tokens[solo_index] = Token::Bound(BoundToken::SoloQuote);
+    }
+    tokens
 }
 
 fn run(program: &str, maybe_input: Option<&str>, debug: bool) -> String {
@@ -621,9 +703,9 @@ fn run(program: &str, maybe_input: Option<&str>, debug: bool) -> String {
         println!("{:#?}", func);
     }
     let input = maybe_input.unwrap_or("0");
-    let parsed_input: Object = ron::from_str(input).expect("Invalid input");
+    let parsed_input: Object = Object::from_str(input);
     let output = func.execute(parsed_input);
-    ron::to_string(&output).expect("Output serialized")
+    format!("{}", output)
 }
 
 fn main() {
@@ -649,171 +731,6 @@ fn main() {
     let input = matches.value_of("INPUT");
     let result = run(program, input, debug);
     println!("{}", result);
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::*;
-    #[test]
-    fn basic() {
-        let program = "hss";
-        let funcs = parse(lex(program));
-        let desired_funcs = vec![
-            Func::Basic(BasicFunc::Head),
-            Func::Basic(BasicFunc::Sum),
-            Func::Basic(BasicFunc::Sum),
-        ];
-        assert_eq!(funcs, Func::Bound(desired_funcs));
-    }
-    #[test]
-    fn higher() {
-        let program = "mhhm";
-        let funcs = parse(lex(program));
-        let desired_funcs = vec![
-            Func::Higher(HigherFunc::Map, Box::new(Func::Basic(BasicFunc::Head))),
-            Func::Basic(BasicFunc::Head),
-            Func::Higher(HigherFunc::Map, Box::new(Func::Bound(vec![]))),
-        ];
-        assert_eq!(funcs, Func::Bound(desired_funcs));
-    }
-    #[test]
-    fn bind() {
-        let program = "mhmmzz";
-        let funcs = parse(lex(program));
-        let desired_funcs = vec![
-            Func::Higher(HigherFunc::Map, Box::new(Func::Basic(BasicFunc::Head))),
-            Func::Higher(
-                HigherFunc::Map,
-                Box::new(Func::Bound(vec![Func::Higher(
-                    HigherFunc::Map,
-                    Box::new(Func::Bound(vec![])),
-                )])),
-            ),
-        ];
-        assert_eq!(funcs, Func::Bound(desired_funcs));
-    }
-    #[test]
-    fn open_higher() {
-        let program = "mmm";
-        let funcs = parse(lex(program));
-        let desired_funcs = vec![Func::Higher(
-            HigherFunc::Map,
-            Box::new(Func::Higher(
-                HigherFunc::Map,
-                Box::new(Func::Higher(HigherFunc::Map, Box::new(Func::Bound(vec![])))),
-            )),
-        )];
-        assert_eq!(funcs, Func::Bound(desired_funcs));
-    }
-    #[test]
-    fn quote() {
-        let program = "ihmhmhmhzhzhq";
-        let funcs = parse(lex(program));
-        let desired_funcs = vec![Func::Higher(
-            HigherFunc::Inverse,
-            Box::new(Func::Bound(vec![
-                Func::Basic(BasicFunc::Head),
-                Func::Higher(HigherFunc::Map, Box::new(Func::Basic(BasicFunc::Head))),
-                Func::Higher(
-                    HigherFunc::Map,
-                    Box::new(Func::Bound(vec![
-                        Func::Basic(BasicFunc::Head),
-                        Func::Higher(
-                            HigherFunc::Map,
-                            Box::new(Func::Bound(vec![Func::Basic(BasicFunc::Head)])),
-                        ),
-                        Func::Basic(BasicFunc::Head),
-                    ])),
-                ),
-                Func::Basic(BasicFunc::Head),
-            ])),
-        )];
-        assert_eq!(funcs, Func::Bound(desired_funcs));
-    }
-    #[test]
-    fn double() {
-        let program = "bhhzhhz";
-        let funcs = parse(lex(program));
-        let desired_funcs = vec![Func::Double(
-            DoubleFunc::Bifurcate,
-            Box::new(Func::Bound(vec![
-                Func::Basic(BasicFunc::Head),
-                Func::Basic(BasicFunc::Head),
-            ])),
-            Box::new(Func::Bound(vec![
-                Func::Basic(BasicFunc::Head),
-                Func::Basic(BasicFunc::Head),
-            ])),
-        )];
-        assert_eq!(funcs, Func::Bound(desired_funcs));
-    }
-    #[test]
-    fn double_quote() {
-        let program = "bqhhqhhz";
-        let funcs = parse(lex(program));
-        let desired_funcs = vec![Func::Double(
-            DoubleFunc::Bifurcate,
-            Box::new(Func::Bound(vec![
-                Func::Basic(BasicFunc::Head),
-                Func::Basic(BasicFunc::Head),
-            ])),
-            Box::new(Func::Bound(vec![
-                Func::Basic(BasicFunc::Head),
-                Func::Basic(BasicFunc::Head),
-            ])),
-        )];
-        assert_eq!(funcs, Func::Bound(desired_funcs));
-    }
-    #[test]
-    fn double_skip() {
-        let program = "mbq";
-        let funcs = parse(lex(program));
-        let desired_funcs = vec![Func::Higher(
-            HigherFunc::Map,
-            Box::new(Func::Bound(vec![Func::Double(
-                DoubleFunc::Bifurcate,
-                Box::new(Func::Bound(vec![])),
-                Box::new(Func::Bound(vec![])),
-            )])),
-        )];
-        assert_eq!(funcs, Func::Bound(desired_funcs));
-    }
-    #[test]
-    fn double_half_skip() {
-        let program = "mbhq";
-        let funcs = parse(lex(program));
-        let desired_funcs = vec![Func::Higher(
-            HigherFunc::Map,
-            Box::new(Func::Bound(vec![Func::Double(
-                DoubleFunc::Bifurcate,
-                Box::new(Func::Basic(BasicFunc::Head)),
-                Box::new(Func::Bound(vec![])),
-            )])),
-        )];
-        assert_eq!(funcs, Func::Bound(desired_funcs));
-    }
-    #[test]
-    fn double_end() {
-        let program = "b";
-        let funcs = parse(lex(program));
-        let desired_funcs = vec![Func::Double(
-            DoubleFunc::Bifurcate,
-            Box::new(Func::Bound(vec![])),
-            Box::new(Func::Bound(vec![])),
-        )];
-        assert_eq!(funcs, Func::Bound(desired_funcs));
-    }
-    #[test]
-    fn double_half_end() {
-        let program = "bh";
-        let funcs = parse(lex(program));
-        let desired_funcs = vec![Func::Double(
-            DoubleFunc::Bifurcate,
-            Box::new(Func::Basic(BasicFunc::Head)),
-            Box::new(Func::Bound(vec![])),
-        )];
-        assert_eq!(funcs, Func::Bound(desired_funcs));
-    }
 }
 
 #[cfg(test)]

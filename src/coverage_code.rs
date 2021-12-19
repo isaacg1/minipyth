@@ -13,6 +13,15 @@ fn list_int_to_obj(ints: Vec<i64>) -> Object {
     List(ints.into_iter().map(Int).collect())
 }
 
+fn lli_to_obj(intss: Vec<Vec<i64>>) -> Object {
+    List(
+        intss
+            .into_iter()
+            .map(|int| List(int.into_iter().map(Int).collect()))
+            .collect(),
+    )
+}
+
 #[test]
 fn inverse_map() {
     let program = "imh";
@@ -44,7 +53,7 @@ fn order() {
 fn head_empty() {
     let program = "fhmmh";
     let input = Int(3);
-    let desired_output = List(vec![list_int_to_obj(vec![1]), list_int_to_obj(vec![1, 2])]);
+    let desired_output = lli_to_obj(vec![vec![1], vec![1, 2]]);
     let output = run_prog(program, input);
     assert_eq!(desired_output, output);
 }
@@ -62,12 +71,13 @@ fn sum_list_of_lists() {
 fn inverse_tail() {
     let program = "xitm";
     let input = Int(4);
-    let desired_output = List(
-        vec![vec![0, 1, 2, 3], vec![0, 1, 2], vec![0, 1], vec![0], vec![]]
-            .into_iter()
-            .map(list_int_to_obj)
-            .collect(),
-    );
+    let desired_output = lli_to_obj(vec![
+        vec![0, 1, 2, 3],
+        vec![0, 1, 2],
+        vec![0, 1],
+        vec![0],
+        vec![],
+    ]);
     let output = run_prog(program, input);
     assert_eq!(desired_output, output);
 }
@@ -119,19 +129,39 @@ fn double_inverse() {
 fn while_arg_error() {
     let program = "wytm";
     let input = Int(4);
-    let desired_output = List(
-        vec![vec![0, 1, 2, 3], vec![1, 2, 3], vec![2, 3], vec![3], vec![]]
-            .into_iter()
-            .map(list_int_to_obj)
-            .collect(),
-    );
+    let desired_output = lli_to_obj(vec![
+        vec![0, 1, 2, 3],
+        vec![1, 2, 3],
+        vec![2, 3],
+        vec![3],
+        vec![],
+    ]);
     let output = run_prog(program, input);
     assert_eq!(desired_output, output);
 }
+
 #[test]
 fn bifurcate_second_error() {
     let program = "bltm";
     let input = Int(0);
     let output = run_prog(program, input);
     assert!(matches!(output, Error(_)));
+}
+
+#[test]
+fn transpose() {
+    let program = "pmm";
+    let input = Int(5);
+    let desired_output = lli_to_obj(vec![vec![0, 0, 0, 0], vec![1, 1, 1], vec![2, 2], vec![3]]);
+    let output = run_prog(program, input);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn transpose_mixed() {
+    let program = "pxm";
+    let input = Int(5);
+    let desired_output = lli_to_obj(vec![vec![5, 0], vec![1], vec![2], vec![3], vec![4]]);
+    let output = run_prog(program, input);
+    assert_eq!(desired_output, output);
 }
