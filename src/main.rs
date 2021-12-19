@@ -49,6 +49,7 @@ impl Func {
 enum Object {
     Int(i64),
     List(Vec<Object>),
+    Error(String),
 }
 
 #[derive(PartialOrd, Ord, PartialEq, Eq)]
@@ -60,6 +61,7 @@ impl Object {
         match self {
             Int(i) => SortKey(false, *i, vec![]),
             List(l) => SortKey(true, 0, l.iter().map(|obj| obj.to_key()).collect()),
+            Error(_) => unreachable!("No errors in lists: {:?}", self),
         }
     }
     fn is_truthy(&self) -> bool {
@@ -67,6 +69,7 @@ impl Object {
         match self {
             Int(i) => *i != 0,
             List(l) => !l.is_empty(),
+            Error(_) => false,
         }
     }
 }
@@ -96,13 +99,29 @@ impl BasicFunc {
         use Object::*;
         match (self, arg) {
             (Head, Int(i)) => Int(i + 1),
-            (Head, List(mut l)) => l.remove(0),
+            (Head, List(mut l)) => {
+                if l.is_empty() {
+                    Error("Head of empty list".to_string())
+                } else {
+                    l.remove(0)
+                }
+            }
             (Tail, Int(i)) => Int(i - 1),
             (Tail, List(mut l)) => {
-                l.remove(0);
-                List(l)
+                if l.is_empty() {
+                    Error("Tail of empty list".to_string())
+                } else {
+                    l.remove(0);
+                    List(l)
+                }
             }
-            (Sum, Int(i)) => if i == 0 { Int(1) } else { Int(0)},
+            (Sum, Int(i)) => {
+                if i == 0 {
+                    Int(1)
+                } else {
+                    Int(0)
+                }
+            }
             (Sum, List(l)) => {
                 if l.iter().all(|elem| matches!(elem, Int(_))) {
                     let total = l
@@ -114,7 +133,7 @@ impl BasicFunc {
                     let mut output = vec![];
                     for elem in l {
                         match elem {
-                            Int(_) => output.push(elem),
+                            Int(_) | Error(_) => output.push(elem),
                             List(l) => output.extend(l),
                         }
                     }
@@ -129,14 +148,31 @@ impl BasicFunc {
                         .product();
                     Int(total)
                 } else {
+                    // Transpose
                     panic!("Product of list of list not implemented: {:?}", List(l));
                 }
             }
             (PowerSet, Int(i)) => {
                 if i < 0 {
+                    // Rationals
                     panic!("Negative exponent in power set not implemented: {}", i);
                 }
                 Int(2i64.pow(i as u32))
+            }
+            (PowerSet, List(l)) => {
+                let num_subsets = 2u64.pow(l.len() as u32);
+                let mut output = vec![];
+                for i in 0..num_subsets {
+                    let mut subset = vec![];
+                    for (index, elem) in l.iter().enumerate() {
+                        let mask = 1 << index;
+                        if i & mask > 0 {
+                            subset.push(elem.clone());
+                        }
+                    }
+                    output.push(List(subset))
+                }
+                List(output)
             }
             (Length, List(l)) => Int(l.len() as i64),
             (Negate, Int(i)) => Int(-i),
@@ -144,6 +180,7 @@ impl BasicFunc {
                 l.reverse();
                 List(l)
             }
+            (_, a @ Error(_)) => a,
             (s, a) => panic!("Basic func unimplemented: {:?}, {:?}", s, a),
         }
     }
@@ -152,10 +189,20 @@ impl BasicFunc {
         use Object::*;
         match (self, arg) {
             (Head, Int(i)) => Int(i - 1),
-            (Head, List(mut l)) => l.remove(l.len() - 1),
+            (Head, List(mut l)) => {
+                if l.is_empty() {
+                    Error("End (inverse head) of empty list".to_string())
+                } else {
+                    l.remove(l.len() - 1)
+                }
+            }
             (Tail, List(mut l)) => {
-                l.pop();
-                List(l)
+                if l.is_empty() {
+                    Error("Inverse tail of empty list".to_string())
+                } else {
+                    l.pop();
+                    List(l)
+                }
             }
             (Product, List(l)) if l.len() == 2 => {
                 if let Int(num) = l[0] {
@@ -165,6 +212,7 @@ impl BasicFunc {
                 }
                 panic!("Unimplemented inverse product: {:?} {:?}", self, List(l));
             }
+            (_, a @ Error(_)) => a,
             (s, a) => panic!("Basic inverse func unimplemented: {:?}, {:?}", s, a),
         }
     }
@@ -185,15 +233,28 @@ impl HigherFunc {
             Int(i) if i < 0 => (0..-i).rev().map(Int).collect(),
             Int(i) => (0..i).map(Int).collect(),
             List(l) => l,
+            a @ Error(_) => panic!("to_list called on {:?}", a),
+        }
+    }
+    fn first_error(mut arg: Vec<Object>) -> Object {
+        let maybe_index = arg.iter().position(|elem| matches!(elem, Object::Error(_)));
+        if let Some(index) = maybe_index {
+            arg.remove(index)
+        } else {
+            Object::List(arg)
         }
     }
     fn execute(&self, func: &Func, arg: Object) -> Object {
         use HigherFunc::*;
         use Object::*;
+        if matches! {arg, Error(_)} {
+            return arg;
+        }
         match self {
             Map => {
                 let list = HigherFunc::to_list(arg);
-                List(list.into_iter().map(|obj| func.execute(obj)).collect())
+                let out_list = list.into_iter().map(|obj| func.execute(obj)).collect();
+                HigherFunc::first_error(out_list)
             }
             Filter => {
                 let mut list = HigherFunc::to_list(arg);
@@ -206,13 +267,13 @@ impl HigherFunc {
                     let new_obj = func.execute(obj.clone());
                     new_obj.to_key()
                 });
-                List(list)
+                HigherFunc::first_error(list)
             }
             FixedPoint => {
                 let mut seen = HashSet::new();
                 let mut sequence = vec![];
                 let mut current = arg;
-                while !seen.contains(&current) {
+                while !seen.contains(&current) && !matches!(current, Error(_)) {
                     seen.insert(current.clone());
                     sequence.push(current.clone());
                     current = func.execute(current);
@@ -264,6 +325,9 @@ impl DoubleFunc {
                 let mut working_arg = arg.clone();
                 let mut sequence = vec![];
                 loop {
+                    if matches!(working_arg, Error(_)) {
+                        break;
+                    }
                     sequence.push(working_arg.clone());
                     let test = func1.execute(working_arg.clone());
                     if !test.is_truthy() {
@@ -276,7 +340,13 @@ impl DoubleFunc {
             Bifurcate => {
                 let ret1 = func1.execute(arg.clone());
                 let ret2 = func2.execute(arg);
-                List(vec![ret1, ret2])
+                if matches! {ret1, Error(_)} {
+                    ret1
+                } else if matches! {ret2, Error(_)} {
+                    ret2
+                } else {
+                    List(vec![ret1, ret2])
+                }
             }
         }
     }
@@ -410,7 +480,11 @@ fn parse(mut tokens: Vec<Token>) -> Func {
                                         state.push(HOF::Func(new_func));
                                         break;
                                     }
-                                    _ => panic!("Paired quote not before higher or double func"),
+                                    // Want to allow btqhhq - not currently working
+                                    _ => panic!(
+                                        "Paired quote not before higher or double func {:?}",
+                                        last_state
+                                    ),
                                 }
                             }
                             Some(HOF::Higher(higher_func)) => {
@@ -656,7 +730,97 @@ mod tests {
         )];
         assert_eq!(funcs, Func::Bound(desired_funcs));
     }
+    #[test]
+    fn double() {
+        let program = "bhhzhhz";
+        let funcs = parse(lex(program));
+        let desired_funcs = vec![Func::Double(
+            DoubleFunc::Bifurcate,
+            Box::new(Func::Bound(vec![
+                Func::Basic(BasicFunc::Head),
+                Func::Basic(BasicFunc::Head),
+            ])),
+            Box::new(Func::Bound(vec![
+                Func::Basic(BasicFunc::Head),
+                Func::Basic(BasicFunc::Head),
+            ])),
+        )];
+        assert_eq!(funcs, Func::Bound(desired_funcs));
+    }
+    #[test]
+    fn double_quote() {
+        let program = "bqhhqhhz";
+        let funcs = parse(lex(program));
+        let desired_funcs = vec![Func::Double(
+            DoubleFunc::Bifurcate,
+            Box::new(Func::Bound(vec![
+                Func::Basic(BasicFunc::Head),
+                Func::Basic(BasicFunc::Head),
+            ])),
+            Box::new(Func::Bound(vec![
+                Func::Basic(BasicFunc::Head),
+                Func::Basic(BasicFunc::Head),
+            ])),
+        )];
+        assert_eq!(funcs, Func::Bound(desired_funcs));
+    }
+    #[test]
+    fn double_skip() {
+        let program = "mbq";
+        let funcs = parse(lex(program));
+        let desired_funcs = vec![Func::Higher(
+            HigherFunc::Map,
+            Box::new(Func::Bound(vec![Func::Double(
+                DoubleFunc::Bifurcate,
+                Box::new(Func::Bound(vec![])),
+                Box::new(Func::Bound(vec![])),
+            )])),
+        )];
+        assert_eq!(funcs, Func::Bound(desired_funcs));
+    }
+    #[test]
+    fn double_half_skip() {
+        let program = "mbhq";
+        let funcs = parse(lex(program));
+        let desired_funcs = vec![Func::Higher(
+            HigherFunc::Map,
+            Box::new(Func::Bound(vec![Func::Double(
+                DoubleFunc::Bifurcate,
+                Box::new(Func::Basic(BasicFunc::Head)),
+                Box::new(Func::Bound(vec![])),
+            )])),
+        )];
+        assert_eq!(funcs, Func::Bound(desired_funcs));
+    }
+    #[test]
+    fn double_end() {
+        let program = "b";
+        let funcs = parse(lex(program));
+        let desired_funcs = vec![Func::Double(
+            DoubleFunc::Bifurcate,
+            Box::new(Func::Bound(vec![])),
+            Box::new(Func::Bound(vec![])),
+        )];
+        assert_eq!(funcs, Func::Bound(desired_funcs));
+    }
+    #[test]
+    fn double_half_end() {
+        let program = "bh";
+        let funcs = parse(lex(program));
+        let desired_funcs = vec![Func::Double(
+            DoubleFunc::Bifurcate,
+            Box::new(Func::Basic(BasicFunc::Head)),
+            Box::new(Func::Bound(vec![])),
+        )];
+        assert_eq!(funcs, Func::Bound(desired_funcs));
+    }
 }
 
 #[cfg(test)]
 mod codegolf;
+
+#[cfg(test)]
+mod coverage_code;
+
+#[cfg(test)]
+mod coverage_parse;
