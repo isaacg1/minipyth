@@ -7,6 +7,6 @@ edition = "2021"
 
 [dependencies]
 clap = "^2.34.0"
-ron = "^0.7.0"
 serde = "^1.0.132"
 num-bigint = "^0.4.3"
+num-traits = "^0.2.14"

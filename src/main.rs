@@ -1,11 +1,12 @@
 use clap::{App, Arg};
-use serde::{Deserialize, Serialize};
-use num_bigint::BigInt;
+use num_bigint::{BigInt, ToBigInt};
+use num_traits::cast::ToPrimitive;
+use num_traits::{One, Zero};
 
 use std::collections::HashSet;
 use std::fmt;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Func {
     Basic(BasicFunc),
     Higher(HigherFunc, Box<Func>),
@@ -45,10 +46,9 @@ impl Func {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 enum Object {
-    Int(i64),
+    Int(BigInt),
     List(Vec<Object>),
     Error(String),
 }
@@ -68,7 +68,7 @@ impl fmt::Display for Object {
                 }
                 write!(f, "]")
             }
-            Error(e) => write!(f, "Error({})", e),
+            Error(e) => write!(f, "Error: {}", e),
         }
     }
 }
@@ -77,39 +77,98 @@ impl Object {
     fn from_str(string: &str) -> Object {
         use Object::*;
         assert!(!string.is_empty(), "Object string should not be empty");
-        if string.chars().nth(0).expect("Nonempty") == '[' {
-            assert!(string.chars().rev().nth(0).expect("Nonempty") == ']', "Object string should have matched brackets");
-            let sub_string = &string[1..string.len()-1];
+        if !string.contains('[') && !string.contains(',') {
+            let integer = string.parse().expect("Nonlist should be int");
+            return Int(integer);
+        }
+        let sub_string = if string.chars().nth(0).expect("Nonempty") == '[' {
+            assert!(
+                string.chars().rev().nth(0).expect("Nonempty") == ']',
+                "Object string should have matched brackets: {:?}",
+                string
+            );
+            &string[1..string.len() - 1]
+        } else {
+            string
+        };
+        if !sub_string.contains('[') {
             let mut sub_vec = vec![];
             for element_string in sub_string.split(',') {
                 let trimmed = element_string.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
                 let sub_elem = Object::from_str(trimmed);
                 sub_vec.push(sub_elem);
             }
             List(sub_vec)
         } else {
-            let integer = string.parse().expect("Nonlist should be int");
-            Int(integer)
+            let mut cursor = 0;
+            let mut sub_vec = vec![];
+            loop {
+                let next_bracket = sub_string
+                    .chars()
+                    .enumerate()
+                    .skip(cursor)
+                    .filter(|(_, c)| *c == '[')
+                    .next();
+                if let Some((bracket_index, _)) = next_bracket {
+                    let inner = sub_string[cursor..bracket_index].trim();
+                    let inner_obj = Object::from_str(inner);
+                    if let List(list) = inner_obj {
+                        sub_vec.extend(list);
+                    } else {
+                        panic!("Inner is list: {:?}", inner_obj)
+                    }
+                    cursor = bracket_index;
+                } else {
+                    let inner = sub_string[cursor..].trim();
+                    let inner_obj = Object::from_str(inner);
+                    if let List(list) = inner_obj {
+                        sub_vec.extend(list);
+                    } else {
+                        panic!("Inner is list: {:?}", inner_obj)
+                    }
+                    break;
+                }
+                let next_close = sub_string
+                    .chars()
+                    .enumerate()
+                    .skip(cursor)
+                    .filter(|(_, c)| *c == ']')
+                    .next()
+                    .expect("Open has close")
+                    .0;
+                let inner = sub_string[cursor..=next_close].trim();
+                let inner_obj = Object::from_str(inner);
+                sub_vec.push(inner_obj);
+                cursor = next_close + 1;
+            }
+            List(sub_vec)
         }
     }
 }
 
 #[derive(PartialOrd, Ord, PartialEq, Eq)]
-struct SortKey(bool, i64, Vec<SortKey>);
+struct SortKey(bool, BigInt, Vec<SortKey>);
 
 impl Object {
     fn to_key(&self) -> SortKey {
         use Object::*;
         match self {
-            Int(i) => SortKey(false, *i, vec![]),
-            List(l) => SortKey(true, 0, l.iter().map(|obj| obj.to_key()).collect()),
+            Int(i) => SortKey(false, i.clone(), vec![]),
+            List(l) => SortKey(
+                true,
+                Zero::zero(),
+                l.iter().map(|obj| obj.to_key()).collect(),
+            ),
             Error(_) => unreachable!("No errors in lists: {:?}", self),
         }
     }
     fn is_truthy(&self) -> bool {
         use Object::*;
         match self {
-            Int(i) => *i != 0,
+            Int(i) => *i != Zero::zero(),
             List(l) => !l.is_empty(),
             Error(_) => false,
         }
@@ -124,7 +183,7 @@ enum Token {
     Bound(BoundToken),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 enum BasicFunc {
     Head,
     Tail,
@@ -158,10 +217,10 @@ impl BasicFunc {
                 }
             }
             (Sum, Int(i)) => {
-                if i == 0 {
-                    Int(1)
+                if i == Zero::zero() {
+                    Int(One::one())
                 } else {
-                    Int(0)
+                    Int(Zero::zero())
                 }
             }
             (Sum, List(l)) => {
@@ -226,11 +285,14 @@ impl BasicFunc {
                 }
             }
             (PowerSet, Int(i)) => {
-                if i < 0 {
+                if i < Zero::zero() {
                     // Rationals
                     panic!("Negative exponent in power set not implemented: {}", i);
                 }
-                Int(2i64.pow(i as u32))
+                Int(2
+                    .to_bigint()
+                    .unwrap()
+                    .pow(i.to_u64().expect("Exponent small") as u32))
             }
             (PowerSet, List(l)) => {
                 let num_subsets = 2u64.pow(l.len() as u32);
@@ -247,7 +309,7 @@ impl BasicFunc {
                 }
                 List(output)
             }
-            (Length, List(l)) => Int(l.len() as i64),
+            (Length, List(l)) => Int(l.len().to_bigint().unwrap()),
             (Negate, Int(i)) => Int(-i),
             (Negate, List(mut l)) => {
                 l.reverse();
@@ -278,9 +340,14 @@ impl BasicFunc {
                 }
             }
             (Product, List(l)) if l.len() == 2 => {
-                if let Int(num) = l[0] {
-                    if let Int(den) = l[1] {
-                        return List(vec![Int(num / den), Int(num % den)]);
+                if let Int(num) = &l[0] {
+                    if let Int(den) = &l[1] {
+                        let zero: BigInt = Zero::zero();
+                        if den == &zero {
+                            return Error("Divide by zero".to_string());
+                        } else {
+                            return List(vec![Int(num / den), Int(num % den)]);
+                        }
                     }
                 }
                 panic!("Unimplemented inverse product: {:?} {:?}", self, List(l));
@@ -291,7 +358,7 @@ impl BasicFunc {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 enum HigherFunc {
     Map,
     Filter,
@@ -303,8 +370,32 @@ impl HigherFunc {
     fn to_list(arg: Object) -> Vec<Object> {
         use Object::*;
         match arg {
-            Int(i) if i < 0 => (0..-i).rev().map(Int).collect(),
-            Int(i) => (0..i).map(Int).collect(),
+            Int(i) if i < Zero::zero() => {
+                let mut nums = vec![];
+                let mut j: BigInt = Zero::zero();
+                let target = -i;
+                loop {
+                    if &j == &target {
+                        break;
+                    }
+                    nums.push(Int(j.clone()));
+                    j += 1;
+                }
+                nums.reverse();
+                nums
+            }
+            Int(i) => {
+                let mut nums = vec![];
+                let mut j: BigInt = Zero::zero();
+                loop {
+                    if &j == &i {
+                        break;
+                    }
+                    nums.push(Int(j.clone()));
+                    j += 1;
+                }
+                nums
+            }
             List(l) => l,
             a @ Error(_) => panic!("to_list called on {:?}", a),
         }
@@ -358,35 +449,22 @@ impl HigherFunc {
     }
     fn inverse_execute(&self, func: &Func, arg: Object) -> Object {
         use HigherFunc::*;
-        use Object::*;
         match self {
-            Map => {
-                let list = HigherFunc::to_list(arg);
-                List(
-                    list.into_iter()
-                        .map(|obj| func.inverse_execute(obj))
-                        .collect(),
-                )
-            }
-            Filter => {
-                let mut list = HigherFunc::to_list(arg);
-                list.retain(|obj| func.inverse_execute(obj.clone()).is_truthy());
-                List(list)
-            }
-            // Order: Inverse permutation, original func
+            // TODO: Order: Inverse permutation, original func
             Inverse => func.execute(arg),
-            s => panic!(
-                "Higher inverse func unimplemented: {:?}, {:?}, {:?}",
-                s, func, arg
-            ),
+            _ => {
+                let inv = Func::Higher(HigherFunc::Inverse, Box::new(func.clone()));
+                self.execute(&inv, arg)
+            }
         }
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 enum DoubleFunc {
     While,
     Bifurcate,
+    Repeat,
 }
 
 impl DoubleFunc {
@@ -421,6 +499,36 @@ impl DoubleFunc {
                     List(vec![ret1, ret2])
                 }
             }
+            Repeat => {
+                let times = func1.execute(arg.clone());
+                match times {
+                    List(l) => {
+                        let mut output = vec![arg.clone()];
+                        let mut current = arg;
+                        for _ in 0..l.len() {
+                            current = func2.execute(current);
+                            output.push(current.clone());
+                        }
+                        List(output)
+                    }
+                    Int(i) => {
+                        if i < Zero::zero() {
+                            List(vec![])
+                        } else {
+                            let mut output = vec![arg.clone()];
+                            let mut current = arg;
+                            let mut j: BigInt = Zero::zero();
+                            while j < i {
+                                current = func2.execute(current);
+                                output.push(current.clone());
+                                j += 1;
+                            }
+                            List(output)
+                        }
+                    }
+                    Error(_) => List(vec![]),
+                }
+            }
         }
     }
     fn inverse_execute(&self, func1: &Func, func2: &Func, arg: Object) -> Object {
@@ -432,15 +540,16 @@ impl DoubleFunc {
                 let res1 = func1.execute(arg.clone());
                 let res2 = func2.execute(arg);
                 if res1 == res2 {
-                    Int(1)
+                    Int(One::one())
                 } else {
-                    Int(0)
+                    Int(Zero::zero())
                 }
             }
-            While => panic!(
-                "Double func inverse unimplemented: {:?} {:?} {:?} {:?}",
-                self, func1, func2, arg
-            ),
+            _ => {
+                let inv1 = Func::Higher(HigherFunc::Inverse, Box::new(func1.clone()));
+                let inv2 = Func::Higher(HigherFunc::Inverse, Box::new(func2.clone()));
+                self.execute(&inv1, &inv2, arg)
+            }
         }
     }
 }
@@ -673,6 +782,7 @@ fn lex(code: &str) -> Vec<Token> {
             'o' => Token::Higher(HigherFunc::Order),
             'p' => Token::Basic(BasicFunc::Product),
             'q' => Token::Bound(BoundToken::BoundQuote),
+            'r' => Token::Double(DoubleFunc::Repeat),
             's' => Token::Basic(BasicFunc::Sum),
             't' => Token::Basic(BasicFunc::Tail),
             'w' => Token::Double(DoubleFunc::While),
