@@ -46,13 +46,17 @@ fn primality() {
 fn fibonacci() {
     // https://codegolf.stackexchange.com/questions/85
 
-    let program = "ihhhzxbthzqbshihqbzbhhzhm";
-    let func = parse(lex(program));
-    let mut fib_pair = (0, 1);
-    for i in 1..10 {
-        let output = func.execute(int_to_obj(i));
-        let desired_output = int_to_obj(fib_pair.1);
-        assert_eq!(desired_output, output, "Input: {}", i);
-        fib_pair = (fib_pair.1, fib_pair.0 + fib_pair.1);
+    let programs = vec![
+        ("ihhhzxbthzqbshihqbzbhhzhm", (0, 1)),
+        ("hipbihhzqhthqrihbshb", (1, 1)),
+    ];
+    for (program, mut fib_pair) in programs {
+        let func = parse(lex(program));
+        for i in 1..10 {
+            let output = func.execute(int_to_obj(i));
+            let desired_output = int_to_obj(fib_pair.1);
+            assert_eq!(desired_output, output, "Input: {}", i);
+            fib_pair = (fib_pair.1, fib_pair.0 + fib_pair.1);
+        }
     }
 }

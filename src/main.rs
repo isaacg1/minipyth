@@ -162,7 +162,7 @@ impl Object {
                 Zero::zero(),
                 l.iter().map(|obj| obj.to_key()).collect(),
             ),
-            Error(_) => unreachable!("No errors in lists: {:?}", self),
+            Error(_) => SortKey(true, One::one(), vec![]),
         }
     }
     fn is_truthy(&self) -> bool {
@@ -431,7 +431,7 @@ impl HigherFunc {
                     let new_obj = func.execute(obj.clone());
                     new_obj.to_key()
                 });
-                HigherFunc::first_error(list)
+                List(list)
             }
             FixedPoint => {
                 let mut seen = HashSet::new();
@@ -658,10 +658,24 @@ fn parse(tokens: Vec<Token>) -> Func {
                                         state.push(HOF::Func(new_func));
                                         break;
                                     }
-                                    // TODO: Want to allow btqhhq - not currently working
+                                    Some(HOF::Func(func)) => {
+                                        let second_last_state = state.pop();
+                                        match second_last_state {
+                                            Some(HOF::Double(double_func)) => {
+                                                let new_func = Func::Double(
+                                                    double_func,
+                                                    Box::new(func),
+                                                    Box::new(bound_func),
+                                                );
+                                                state.push(HOF::Func(new_func));
+                                                break;
+                                            }
+                                            _ => panic!("Paired quote in front of func, not in legal position: {:?} {:?} {:?}", state, func, second_last_state),
+                                        }
+                                    }
                                     _ => panic!(
-                                        "Paired quote not before higher or double func {:?}",
-                                        last_state
+                                        "Paired quote not in legal position: {:?} {:?}",
+                                        state, last_state
                                     ),
                                 }
                             }

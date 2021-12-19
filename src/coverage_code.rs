@@ -183,3 +183,66 @@ fn obj_error() {
     let desired_output = "Error: Tail of empty list";
     assert_eq!(desired_output, output);
 }
+
+#[test]
+fn sum_mixed() {
+    let program = "sxm";
+    let input = int_to_obj(5);
+    let desired_output = list_int_to_obj(vec![5, 0, 1, 2, 3, 4]);
+    let output = run_prog(program, input);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn divide_by_zero() {
+    let program = "ipm";
+    let input = int_to_obj(-2);
+    let output = run_prog(program, input);
+    assert!(matches!(output, Error(_)));
+}
+
+#[test]
+fn repeat_list() {
+    let program = "rtym";
+    let input = int_to_obj(2);
+    let output = run_prog(program, input);
+    let desired_output = List(vec![
+        list_int_to_obj(vec![0, 1]),
+        lli_to_obj(vec![vec![], vec![0], vec![1], vec![0, 1]]),
+    ]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn repeat_weird() {
+    let program = "mrzztltmq";
+    let input = int_to_obj(3);
+    let output = run_prog(program, input);
+    let desired_output = lli_to_obj(vec![vec![], vec![], vec![0]]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn inv_double() {
+    let program = "irtpm";
+    let input = int_to_obj(2);
+    let output = run_prog(program, input);
+    let desired_output = lli_to_obj(vec![vec![0, 1], vec![0, 0]]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn order_error() {
+    let program = "ozrhztmq";
+    let input = int_to_obj(2);
+    let output = run_prog(program, input);
+    if let List(list) = output {
+        assert_eq!(4, list.len());
+        assert_eq!(int_to_obj(2), list[0]);
+        assert_eq!(list_int_to_obj(vec![]), list[1]);
+        assert_eq!(list_int_to_obj(vec![1]), list[2]);
+        assert!(matches!(list[3], Error(_)));
+    } else {
+        panic!("{:?}", output)
+    }
+}
