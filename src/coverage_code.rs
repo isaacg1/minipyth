@@ -1,41 +1,14 @@
+use crate::test_helpers::*;
+use crate::Object;
 use crate::Object::*;
-use crate::{lex, parse, Object};
-use num_bigint::ToBigInt;
 
 // The goal of this module is coverage of all nontrivial behavior of the execute functions
-
-fn run_prog(program: &str, input: Object) -> Object {
-    let tokens = lex(program);
-    let func = parse(tokens);
-    func.execute(input)
-}
-
-fn int_to_obj(int: i64) -> Object {
-    Int(int.to_bigint().unwrap())
-}
-
-fn list_int_to_obj(ints: Vec<i64>) -> Object {
-    List(ints.into_iter().map(int_to_obj).collect())
-}
-
-fn lli_to_obj(intss: Vec<Vec<i64>>) -> Object {
-    List(intss.into_iter().map(list_int_to_obj).collect())
-}
 
 #[test]
 fn inverse_map() {
     let program = "imh";
     let input = int_to_obj(10);
     let desired_output = list_int_to_obj(vec![-1, 0, 1, 2, 3, 4, 5, 6, 7, 8]);
-    let output = run_prog(program, input);
-    assert_eq!(desired_output, output);
-}
-
-#[test]
-fn inverse_bifurcate() {
-    let program = "mibhy";
-    let input = int_to_obj(3);
-    let desired_output = list_int_to_obj(vec![1, 1, 0]);
     let output = run_prog(program, input);
     assert_eq!(desired_output, output);
 }
@@ -185,6 +158,14 @@ fn obj_error() {
 }
 
 #[test]
+fn obj_nested_first() {
+    let input = "[[1, 2, 3, 4], [2, 3, 4, 1]]";
+    let object = Object::from_str(input);
+    let output = format!("{}", object);
+    assert_eq!(input, &output);
+}
+
+#[test]
 fn sum_mixed() {
     let program = "sxm";
     let input = int_to_obj(5);
@@ -203,7 +184,7 @@ fn divide_by_zero() {
 
 #[test]
 fn repeat_list() {
-    let program = "rtym";
+    let program = "rybtzzm";
     let input = int_to_obj(2);
     let output = run_prog(program, input);
     let desired_output = List(vec![
@@ -214,26 +195,22 @@ fn repeat_list() {
 }
 
 #[test]
-fn repeat_weird() {
-    let program = "mrzztltmq";
+fn inv_double() {
+    let program = "irmh";
     let input = int_to_obj(3);
     let output = run_prog(program, input);
-    let desired_output = lli_to_obj(vec![vec![], vec![], vec![0]]);
-    assert_eq!(desired_output, output);
-}
-
-#[test]
-fn inv_double() {
-    let program = "irtpm";
-    let input = int_to_obj(2);
-    let output = run_prog(program, input);
-    let desired_output = lli_to_obj(vec![vec![0, 1], vec![0, 0]]);
+    let desired_output = List(vec![
+        int_to_obj(3),
+        list_int_to_obj(vec![-1, 0, 1]),
+        list_int_to_obj(vec![-2, -1, 0]),
+        list_int_to_obj(vec![-3, -2, -1]),
+    ]);
     assert_eq!(desired_output, output);
 }
 
 #[test]
 fn order_error() {
-    let program = "ozrhztmq";
+    let program = "ozrtmqbh";
     let input = int_to_obj(2);
     let output = run_prog(program, input);
     if let List(list) = output {
@@ -245,4 +222,49 @@ fn order_error() {
     } else {
         panic!("{:?}", output)
     }
+}
+
+#[test]
+fn repeat_empty() {
+    let program = "rtm";
+    let input = int_to_obj(0);
+    let output = run_prog(program, input);
+    let desired_output = lli_to_obj(vec![vec![]]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn repeat_one() {
+    let program = "rhmhhhz";
+    let input = int_to_obj(1);
+    let output = run_prog(program, input);
+    let desired_output = list_int_to_obj(vec![3, 4, 5, 6]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn inverse_while() {
+    let program = "iwhh";
+    let input = int_to_obj(5);
+    let output = run_prog(program, input);
+    let desired_output = list_int_to_obj(vec![5, 4, 3, 2, 1]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn equal_empty() {
+    let program = "mextm";
+    let input = int_to_obj(5);
+    let output = run_prog(program, input);
+    let desired_output = list_int_to_obj(vec![0, 0, 0, 0, 1, 1]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn inverse_order() {
+    let program = "ios";
+    let input = int_to_obj(5);
+    let output = run_prog(program, input);
+    let desired_output = list_int_to_obj(vec![4, 0, 1, 2, 3]);
+    assert_eq!(desired_output, output);
 }

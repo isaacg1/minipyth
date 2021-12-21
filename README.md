@@ -3,36 +3,44 @@
 Minipyth is a new programming language,
 inspired by [Pyth](https://github.com/isaacg1/pyth).
 Minipyth is intended to be
-to program from my phone.
+programmed from my phone.
 As a result, the only characters used in Minipyth
-are the characters on the home screen of my phone's default layout,
-namely lowercase letters,
-comma, period, space, and newline.
+are lowercase letters.
 Additionally, Minipyth is a golfy language:
 Each character is an independent atom of the language.
 Ideally, anything can be programmed using a short program.
 
-Because the language has only 30 characters,
-it is possible to give a encoding of Minipyth using only 5 bits per byte.
-This mode will is enabled by a flag.
+Minipyth is a highly minimalistic language,
+and intentionally lacks many features that are taken for granted in other languages.
+Minipyth lacks:
 
-For ease of debugging, there is also a flag for
-using the character mnemonics rather than the characters themselves.
+* Variables
+
+* Closures
+
+* Functions of arity other than 1.
+
+* General control flow primitives.
+
+Now that we know what Minipyth lacks, let's talk about its features.
 
 # High-level semantics
 
 There are three types of characters in the language:
 
-* Basic functions
+* Basic functions, which take one object as input and return an object as output.
 
-* Higher-order functions
+* Higher-order functions, which take one or more functions as input
+and create a function as output. The resulting function takes one object as input
+and returns an object as output.
 
-* Binders
+* Binders, which combine a sequence of functions into a single function.
 
 ## Basic functions
 
 A basic function takes 1 argument and returns 1 output.
-Functions are applied to the input by default.
+Functions are applied to the input by default,
+in order from right to left.
 For instance, consider the program
 
     hs
@@ -53,7 +61,8 @@ The program **hs** sums the list, and increments the result, returning 10.
 
 ## Higher-order functions
 
-A higher-order function takes a basic function as input, and returns a basic function,
+A higher-order function takes one or more functions as input,
+and returns a function,
 which is then applied as usual.
 By default, the input basic function is the following character,
 or the basic function returned by the following character.
@@ -75,9 +84,9 @@ and package them into one function, for use in higher-order functions.
 
 For instance, consider the program
 
-    mhhb
+    mhhz
 
-**b** is the bind-1 binder.
+**z** is the bind-1 binder.
 It packages **hh** into a single function.
 Therefore, this program increases each input by 2.
 If the input is the list `[4, 5]`, this program returns `[6, 7]`.
@@ -86,25 +95,45 @@ If the input is the list `[4, 5]`, this program returns `[6, 7]`.
 
 An object can be any of the following types:
 
-* Number. Numbers can be internally represented as ints, rational or float.
-
-* Char. A letter of a string
+* Integer. Numbers are unbounded in size.
 
 * List. Lists can hold arbitrary objects.
 
-# Character reference
+* Error. Errors mostly just propogate up to the top of the program,
+but some functions can handle them gracefully.
+
+Sometimes, functions need to interpret objects as truthy or falsy.
+The falsy objects are 0, [], and all errors.
+All other objects are falsy.
+
+Sometimes, functions need to output a truth value.
+1 represents true, 0 represents false.
+
+# Language reference
+
+Updated: 2021-12-20
 
 | chars | mnemonic | Type | Function |
 | ----- | -------- | ---- | -------- |
-| b | bind-1 | binder | Binds back to the first higher order function not already bound to. |
-| h | head | basic | Num: +1. List: first element |
-| t | tail | basic | List: All but first element |
-| s | sum | basic | List: sum |
-| p | product | basic | List: product |
-| y | power-set | basic | List: power-set |
-| l | length | basic | List: length |
-| f | filter | higher | List: filter func over list |
+| b | bifurcate | higher-2 | Given two funcs, list of each applied to the input. |
+| e | equal | basic | Given a list, check if all elements identical. Int unimplemented. |
+| f | filter | higher | to_list: filter func over list |
+| h | head | basic | Int: x+1. List: first element |
 | i | inverse | higher | Invert. Defined case-by-case. |
-| m | map | higher | List: map func over list |
-| o | order | higher | List: order by func |
-| u | fixed-point | higher | Apply until result repeats or errors. Return all results. |
+| l | length | basic | List: length. Int unimplemented. |
+| m | map | higher | to_list: map func over list. |
+| n | negate | basic | Int: -x. List: reverse | 
+| o | order | higher | to_list: order by key given by func |
+| p | product | basic | Int: prime-factorization. List(Int): product. List(List): transpose |
+| q | quote | binder | Pair with next q, combine everything within into one function. If odd number, first q pairs with earliest eligible location in the program.
+| r | repeat | higher | Apply func a number of times equal to input[0], starting with input[1]. Return starting value and all results. If input is length 1 or non-list, use input as both times and start.
+| s | sum | basic | Int: logical negation. List(Int): integer sum. List(List): concatenate |
+| t | tail | basic | Int: x-1. List: All but first element |
+| w | while | higher-2 | Apply second func until first func returns falsy or error. Return starting value and all results.
+| x | fixed-point | higher | Apply until result repeats or errors. Return all results. |
+| y | power-set | basic | Int: 2^x. List: power-set |
+| z | bind-eager | binder | Combine everything backwards until unbound higher-order function into one function.
+
+Glossary:
+
+* to_list: Cast to list. Int >= 0: range [0, i). Int < 0: reverse of to_list(-i). List unchanged.

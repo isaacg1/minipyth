@@ -162,3 +162,18 @@ fn double_half_end() {
     )];
     assert_eq!(funcs, Func::Bound(desired_funcs));
 }
+
+#[test]
+fn double_half_quote() {
+    let program = "bhqhhq";
+    let funcs = parse(lex(program));
+    let desired_funcs = vec![Func::Double(
+        DoubleFunc::Bifurcate,
+        Box::new(Func::Basic(BasicFunc::Head)),
+        Box::new(Func::Bound(vec![
+            Func::Basic(BasicFunc::Head),
+            Func::Basic(BasicFunc::Head),
+        ])),
+    )];
+    assert_eq!(funcs, Func::Bound(desired_funcs));
+}

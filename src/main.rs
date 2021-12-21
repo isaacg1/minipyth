@@ -47,7 +47,7 @@ impl Func {
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-enum Object {
+pub enum Object {
     Int(BigInt),
     List(Vec<Object>),
     Error(String),
@@ -76,7 +76,9 @@ impl fmt::Display for Object {
 impl Object {
     fn from_str(string: &str) -> Object {
         use Object::*;
-        assert!(!string.is_empty(), "Object string should not be empty");
+        if string.is_empty() {
+            return List(vec![])
+        }
         if !string.contains('[') && !string.contains(',') {
             let integer = string.parse().expect("Nonlist should be int");
             return Int(integer);
@@ -192,6 +194,7 @@ enum BasicFunc {
     PowerSet,
     Length,
     Negate,
+    Equal,
 }
 
 impl BasicFunc {
@@ -239,6 +242,38 @@ impl BasicFunc {
                         }
                     }
                     List(output)
+                }
+            }
+            (Product, Int(i)) => {
+                if i < Zero::zero() {
+                    let mut j = 2.to_bigint().unwrap();
+                    let mut is_prime = true;
+                    while &j * &j <= i {
+                        if &i % &j == Zero::zero() {
+                            is_prime = false;
+                            break
+                        }
+                        j += 1;
+                    }
+                    Int(if is_prime { One::one() } else { Zero::zero() })
+                } else if i < 2.to_bigint().unwrap() {
+                    List(vec![])
+                } else {
+                    let mut factors = vec![];
+                    let mut j = 2.to_bigint().unwrap();
+                    let mut work = i;
+                    while &j * &j <= work {
+                        if &work % &j == Zero::zero() {
+                            work /= &j;
+                            factors.push(j.to_bigint().unwrap());
+                        } else {
+                            j += 1;
+                        }
+                    }
+                    if work > One::one() {
+                        factors.push(work)
+                    }
+                    List(factors.into_iter().map(Int).collect())
                 }
             }
             (Product, List(l)) => {
@@ -315,6 +350,18 @@ impl BasicFunc {
                 l.reverse();
                 List(l)
             }
+            (Equal, List(mut l)) => {
+                if let Some(last) = l.pop() {
+                    let same = l.iter().all(|elem| elem == &last);
+                    if same {
+                        Int(One::one())
+                    } else {
+                        Int(Zero::zero())
+                    }
+                } else {
+                    Int(One::one())
+                }
+            }
             (_, a @ Error(_)) => a,
             (s, a) => panic!("Basic func unimplemented: {:?}, {:?}", s, a),
         }
@@ -365,6 +412,7 @@ enum HigherFunc {
     Order,
     FixedPoint,
     Inverse,
+    Repeat,
 }
 impl HigherFunc {
     fn to_list(arg: Object) -> Vec<Object> {
@@ -445,12 +493,66 @@ impl HigherFunc {
                 List(sequence)
             }
             Inverse => func.inverse_execute(arg),
+            Repeat => {
+                let (times, start) = match arg {
+                    List(mut l) => {
+                        if l.is_empty() {
+                            (List(l.clone()), List(l))
+                        } else if l.len() == 1 {
+                            (l[0].clone(), l[0].clone())
+                        } else {
+                            let first = l.remove(0);
+                            let second = l.remove(0);
+                            (first, second)
+                        }
+                    }
+                    Int(_) | Error(_) => (arg.clone(), arg.clone()),
+                };
+                match times {
+                    List(l) => {
+                        let mut output = vec![start.clone()];
+                        let mut current = start;
+                        for _ in 0..l.len() {
+                            current = func.execute(current);
+                            output.push(current.clone());
+                        }
+                        List(output)
+                    }
+                    Int(i) => {
+                        if i < Zero::zero() {
+                            List(vec![])
+                        } else {
+                            let mut output = vec![start.clone()];
+                            let mut current = start;
+                            let mut j: BigInt = Zero::zero();
+                            while j < i {
+                                current = func.execute(current);
+                                output.push(current.clone());
+                                j += 1;
+                            }
+                            List(output)
+                        }
+                    }
+                    Error(_) => List(vec![]),
+                }
+            }
         }
     }
     fn inverse_execute(&self, func: &Func, arg: Object) -> Object {
         use HigherFunc::*;
+        use Object::*;
         match self {
-            // TODO: Order: Inverse permutation, original func
+            Order => {
+                let list = HigherFunc::to_list(arg);
+                let mut indices: Vec<usize> = (0..list.len()).collect();
+                indices.sort_by_key(|&i| func.execute(list[i].clone()).to_key());
+                let mut inverse_indices: Vec<Option<usize>> = vec![None; list.len()];
+                for (index, &perm) in indices.iter().enumerate() {
+                    inverse_indices[perm] = Some(index);
+                }
+                let reordered = inverse_indices.iter().map(|i| list[i.unwrap()].clone()).collect();
+                List(reordered)
+            }
             Inverse => func.execute(arg),
             _ => {
                 let inv = Func::Higher(HigherFunc::Inverse, Box::new(func.clone()));
@@ -464,7 +566,6 @@ impl HigherFunc {
 enum DoubleFunc {
     While,
     Bifurcate,
-    Repeat,
 }
 
 impl DoubleFunc {
@@ -499,52 +600,10 @@ impl DoubleFunc {
                     List(vec![ret1, ret2])
                 }
             }
-            Repeat => {
-                let times = func1.execute(arg.clone());
-                match times {
-                    List(l) => {
-                        let mut output = vec![arg.clone()];
-                        let mut current = arg;
-                        for _ in 0..l.len() {
-                            current = func2.execute(current);
-                            output.push(current.clone());
-                        }
-                        List(output)
-                    }
-                    Int(i) => {
-                        if i < Zero::zero() {
-                            List(vec![])
-                        } else {
-                            let mut output = vec![arg.clone()];
-                            let mut current = arg;
-                            let mut j: BigInt = Zero::zero();
-                            while j < i {
-                                current = func2.execute(current);
-                                output.push(current.clone());
-                                j += 1;
-                            }
-                            List(output)
-                        }
-                    }
-                    Error(_) => List(vec![]),
-                }
-            }
         }
     }
     fn inverse_execute(&self, func1: &Func, func2: &Func, arg: Object) -> Object {
-        use DoubleFunc::*;
-        use Object::*;
         match self {
-            // Bifurcate: Invariant
-            Bifurcate => {
-                let res1 = func1.execute(arg.clone());
-                let res2 = func2.execute(arg);
-                if res1 == res2 {
-                    Int(One::one())
-                } else {
-                    Int(Zero::zero())
-                }
-            }
             _ => {
                 let inv1 = Func::Higher(HigherFunc::Inverse, Box::new(func1.clone()));
                 let inv2 = Func::Higher(HigherFunc::Inverse, Box::new(func2.clone()));
@@ -787,6 +846,7 @@ fn lex(code: &str) -> Vec<Token> {
         .chars()
         .map(|c| match c {
             'b' => Token::Double(DoubleFunc::Bifurcate),
+            'e' => Token::Basic(BasicFunc::Equal),
             'f' => Token::Higher(HigherFunc::Filter),
             'h' => Token::Basic(BasicFunc::Head),
             'i' => Token::Higher(HigherFunc::Inverse),
@@ -796,7 +856,7 @@ fn lex(code: &str) -> Vec<Token> {
             'o' => Token::Higher(HigherFunc::Order),
             'p' => Token::Basic(BasicFunc::Product),
             'q' => Token::Bound(BoundToken::BoundQuote),
-            'r' => Token::Double(DoubleFunc::Repeat),
+            'r' => Token::Higher(HigherFunc::Repeat),
             's' => Token::Basic(BasicFunc::Sum),
             't' => Token::Basic(BasicFunc::Tail),
             'w' => Token::Double(DoubleFunc::While),
@@ -855,6 +915,31 @@ fn main() {
     let input = matches.value_of("INPUT");
     let result = run(program, input, debug);
     println!("{}", result);
+}
+
+#[cfg(test)]
+mod test_helpers {
+    use crate::Object::*;
+    use crate::{lex, parse, Object};
+    use num_bigint::ToBigInt;
+
+    pub fn run_prog(program: &str, input: Object) -> Object {
+        let tokens = lex(program);
+        let func = parse(tokens);
+        func.execute(input)
+    }
+
+    pub fn int_to_obj(int: i64) -> Object {
+        Int(int.to_bigint().unwrap())
+    }
+
+    pub fn list_int_to_obj(ints: Vec<i64>) -> Object {
+        List(ints.into_iter().map(int_to_obj).collect())
+    }
+
+    pub fn lli_to_obj(intss: Vec<Vec<i64>>) -> Object {
+        List(intss.into_iter().map(list_int_to_obj).collect())
+    }
 }
 
 #[cfg(test)]
