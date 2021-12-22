@@ -105,3 +105,18 @@ fn sqrt() {
         }
     }
 }
+
+#[test]
+fn group_by_displacement() {
+    // https://codegolf.stackexchange.com/questions/239999
+    let program = "mmihgqhhonsqcbmnhzlz";
+    let output = run_prog(program, list_int_to_obj(vec![5, 6, 8, 3, 9, 4, 2, 1, 7]));
+    let desired_output = lli_to_obj(vec![
+        vec![3],
+        vec![4, 7],
+        vec![5, 6, 9],
+        vec![8, 2],
+        vec![1],
+    ]);
+    assert_eq!(desired_output, output);
+}

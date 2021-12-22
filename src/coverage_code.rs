@@ -413,3 +413,12 @@ fn cartesian_product() {
     let desired_output = lli_to_obj(vec![vec![1, 0], vec![1, 1], vec![2, 0], vec![2, 1]]);
     assert_eq!(desired_output, output);
 }
+
+#[test]
+fn repeat_weird() {
+    let program = "mrztqbm";
+    let input = int_to_obj(0);
+    let output = run_prog(program, input);
+    let desired_output = lli_to_obj(vec![vec![], vec![]]);
+    assert_eq!(desired_output, output);
+}

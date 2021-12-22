@@ -3,7 +3,7 @@ use num_bigint::{BigInt, ToBigInt};
 use num_traits::cast::ToPrimitive;
 use num_traits::{One, Signed, Zero};
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -151,7 +151,7 @@ impl Object {
     }
 }
 
-#[derive(PartialOrd, Ord, PartialEq, Eq)]
+#[derive(PartialOrd, Ord, PartialEq, Eq, Hash, Clone)]
 struct SortKey(bool, BigInt, Vec<SortKey>);
 
 impl Object {
@@ -563,6 +563,7 @@ enum HigherFunc {
     FixedPoint,
     Inverse,
     Repeat,
+    GroupBy,
 }
 impl HigherFunc {
     fn first_error(mut arg: Vec<Object>) -> Object {
@@ -649,6 +650,19 @@ impl HigherFunc {
                     }
                     Error(_) => List(vec![]),
                 }
+            }
+            GroupBy => {
+                let list = arg.to_list();
+                let mut groups = HashMap::new();
+                for elem in list {
+                    let key = func.execute(elem.clone()).to_key();
+                    let group = groups.entry(key).or_insert(vec![]);
+                    group.push(elem);
+                }
+                let mut key_vals: Vec<(SortKey, Vec<Object>)> = groups.into_iter().collect();
+                key_vals.sort_by_key(|(s, _)| s.clone());
+                let vals = key_vals.into_iter().map(|(_, v)| List(v)).collect();
+                List(vals)
             }
         }
     }
@@ -967,6 +981,7 @@ fn lex(code: &str) -> Vec<Token> {
             'c' => Token::Basic(BasicFunc::Combine),
             'e' => Token::Basic(BasicFunc::Equal),
             'f' => Token::Higher(HigherFunc::Filter),
+            'g' => Token::Higher(HigherFunc::GroupBy),
             'h' => Token::Basic(BasicFunc::Head),
             'i' => Token::Higher(HigherFunc::Inverse),
             'l' => Token::Basic(BasicFunc::Length),
