@@ -111,22 +111,24 @@ Sometimes, functions need to output a truth value.
 
 # Language reference
 
-Updated: 2021-12-20
+Updated: 2021-12-22
 
 | chars | mnemonic | Type | Function |
 | ----- | -------- | ---- | -------- |
-| b | bifurcate | higher-2 | Given two funcs, list of each applied to the input. |
+| a | all-pairs | basic | Given [x, [a, b, c, ...]], create [[x, a], [x, b], ...]. Given [[a, b, c, ...], int], create [[a, int], [b, int], ...]. Given list of ints l, same as [l, l]. Given int i, [[i, 0], [i, 1], ..., [i, i-1]]. |
+| b | bifurcate | higher-2 | Given two funcs, apply each to input, make list. |
+| c | combine | basic | Transponse list. Int unimplemented. |
 | e | equal | basic | Given a list, check if all elements identical. Int unimplemented. |
 | f | filter | higher | to_list: filter func over list |
 | h | head | basic | Int: x+1. List: first element |
 | i | inverse | higher | Invert. Defined case-by-case. |
-| l | length | basic | List: length. Int unimplemented. |
+| l | length | basic | List: length. Int: To binary. |
 | m | map | higher | to_list: map func over list. |
 | n | negate | basic | Int: -x. List: reverse | 
 | o | order | higher | to_list: order by key given by func |
-| p | product | basic | Int: prime-factorization. List(Int): product. List(List): transpose |
+| p | product | basic | Int: prime-factorization. List(Int): product. List(List): Cartesian product |
 | q | quote | binder | Pair with next q, combine everything within into one function. If odd number, first q pairs with earliest eligible location in the program.
-| r | repeat | higher | Apply func a number of times equal to input[0], starting with input[1]. Return starting value and all results. If input is length 1 or non-list, use input as both times and start.
+| r | repeat | higher | Apply func a number of times equal to input[0], starting with input[1]. Return all results. If input is length 1 or non-list, use input as both times and start.
 | s | sum | basic | Int: logical negation. List(Int): integer sum. List(List): concatenate |
 | t | tail | basic | Int: x-1. List: All but first element |
 | w | while | higher-2 | Apply second func until first func returns falsy or error. Return starting value and all results.

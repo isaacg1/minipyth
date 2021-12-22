@@ -1,7 +1,7 @@
 use clap::{App, Arg};
 use num_bigint::{BigInt, ToBigInt};
 use num_traits::cast::ToPrimitive;
-use num_traits::{One, Zero};
+use num_traits::{One, Signed, Zero};
 
 use std::collections::HashSet;
 use std::fmt;
@@ -77,7 +77,7 @@ impl Object {
     fn from_str(string: &str) -> Object {
         use Object::*;
         if string.is_empty() {
-            return List(vec![])
+            return List(vec![]);
         }
         if !string.contains('[') && !string.contains(',') {
             let integer = string.parse().expect("Nonlist should be int");
@@ -175,6 +175,39 @@ impl Object {
             Error(_) => false,
         }
     }
+    fn to_list(self) -> Vec<Object> {
+        use Object::*;
+        match self {
+            Int(i) if i < Zero::zero() => {
+                let mut nums = vec![];
+                let mut j: BigInt = Zero::zero();
+                let target = -i;
+                loop {
+                    if &j == &target {
+                        break;
+                    }
+                    nums.push(Int(j.clone()));
+                    j += 1;
+                }
+                nums.reverse();
+                nums
+            }
+            Int(i) => {
+                let mut nums = vec![];
+                let mut j: BigInt = Zero::zero();
+                loop {
+                    if &j == &i {
+                        break;
+                    }
+                    nums.push(Int(j.clone()));
+                    j += 1;
+                }
+                nums
+            }
+            List(l) => l,
+            a @ Error(_) => panic!("to_list called on {:?}", a),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -195,6 +228,8 @@ enum BasicFunc {
     Length,
     Negate,
     Equal,
+    Combine,
+    AllPair,
 }
 
 impl BasicFunc {
@@ -245,23 +280,13 @@ impl BasicFunc {
                 }
             }
             (Product, Int(i)) => {
-                if i < Zero::zero() {
-                    let mut j = 2.to_bigint().unwrap();
-                    let mut is_prime = true;
-                    while &j * &j <= i {
-                        if &i % &j == Zero::zero() {
-                            is_prime = false;
-                            break
-                        }
-                        j += 1;
-                    }
-                    Int(if is_prime { One::one() } else { Zero::zero() })
-                } else if i < 2.to_bigint().unwrap() {
+                let a = i.abs();
+                if a < 2.to_bigint().unwrap() {
                     List(vec![])
                 } else {
                     let mut factors = vec![];
                     let mut j = 2.to_bigint().unwrap();
-                    let mut work = i;
+                    let mut work = a;
                     while &j * &j <= work {
                         if &work % &j == Zero::zero() {
                             work /= &j;
@@ -285,6 +310,27 @@ impl BasicFunc {
                     Int(total)
                 } else if l.iter().any(|elem| matches!(elem, Error(_))) {
                     panic!("Product has error in list: {:?}", l);
+                } else {
+                    let list_of_lists: Vec<Vec<Object>> =
+                        l.into_iter().map(|elem| elem.to_list()).collect();
+                    let mut staged_lists = vec![vec![]];
+                    for sub_list in list_of_lists {
+                        let mut next_stage = vec![];
+                        for old_list in staged_lists {
+                            for elem in sub_list.clone() {
+                                let mut new_list = old_list.clone();
+                                new_list.push(elem.clone());
+                                next_stage.push(new_list);
+                            }
+                        }
+                        staged_lists = next_stage;
+                    }
+                    List(staged_lists.into_iter().map(List).collect())
+                }
+            }
+            (Combine, List(l)) => {
+                if let Some(first_error) = l.iter().filter(|elem| matches!(elem, Error(_))).next() {
+                    first_error.clone()
                 } else {
                     let longest = l
                         .iter()
@@ -322,12 +368,13 @@ impl BasicFunc {
             (PowerSet, Int(i)) => {
                 if i < Zero::zero() {
                     // Rationals
-                    panic!("Negative exponent in power set not implemented: {}", i);
+                    Error("Negative exponent in power set".to_string())
+                } else {
+                    Int(2
+                        .to_bigint()
+                        .unwrap()
+                        .pow(i.to_u64().expect("Exponent small") as u32))
                 }
-                Int(2
-                    .to_bigint()
-                    .unwrap()
-                    .pow(i.to_u64().expect("Exponent small") as u32))
             }
             (PowerSet, List(l)) => {
                 let num_subsets = 2u64.pow(l.len() as u32);
@@ -345,6 +392,14 @@ impl BasicFunc {
                 List(output)
             }
             (Length, List(l)) => Int(l.len().to_bigint().unwrap()),
+            (Length, Int(i)) => {
+                let (_sign, bits) = i.to_radix_be(2);
+                List(
+                    bits.iter()
+                        .map(|&b| Int((b as i64).to_bigint().unwrap()))
+                        .collect(),
+                )
+            }
             (Negate, Int(i)) => Int(-i),
             (Negate, List(mut l)) => {
                 l.reverse();
@@ -361,6 +416,66 @@ impl BasicFunc {
                 } else {
                     Int(One::one())
                 }
+            }
+            (AllPair, List(l)) => {
+                if l.len() >= 2 && l.iter().skip(1).any(|elem| matches!(elem, List(_))) {
+                    let (first, rest) = l.split_first().expect("Checked 2");
+                    let rest_lists: Vec<Vec<Object>> = rest
+                        .into_iter()
+                        .map(|elem| elem.clone().to_list())
+                        .collect();
+                    let out: Vec<Object> = rest_lists
+                        .into_iter()
+                        .map(|list| {
+                            let paired = list
+                                .into_iter()
+                                .map(|elem| List(vec![first.clone(), elem]))
+                                .collect();
+                            List(paired)
+                        })
+                        .collect();
+                    if out.len() == 1 {
+                        out[0].clone()
+                    } else {
+                        List(out)
+                    }
+                } else if l.len() >= 2 && matches!(l[0], List(_)) {
+                    let mut rest = l.clone();
+                    let second = rest.remove(1);
+                    let rest_lists: Vec<Vec<Object>> = rest
+                        .into_iter()
+                        .map(|elem| elem.clone().to_list())
+                        .collect();
+                    let out: Vec<Object> = rest_lists
+                        .into_iter()
+                        .map(|list| {
+                            let paired = list
+                                .into_iter()
+                                .map(|elem| List(vec![elem, second.clone()]))
+                                .collect();
+                            List(paired)
+                        })
+                        .collect();
+                    if out.len() == 1 {
+                        out[0].clone()
+                    } else {
+                        List(out)
+                    }
+                } else {
+                    List(
+                        l.iter()
+                            .map(|elem| List(vec![List(l.clone()), elem.clone()]))
+                            .collect(),
+                    )
+                }
+            }
+            (AllPair, arg @ Int(_)) => {
+                let list = arg.clone().to_list();
+                List(
+                    list.into_iter()
+                        .map(|elem| List(vec![arg.clone(), elem]))
+                        .collect(),
+                )
             }
             (_, a @ Error(_)) => a,
             (s, a) => panic!("Basic func unimplemented: {:?}, {:?}", s, a),
@@ -399,6 +514,41 @@ impl BasicFunc {
                 }
                 panic!("Unimplemented inverse product: {:?} {:?}", self, List(l));
             }
+            (Product, Int(i)) => {
+                if i <= One::one() {
+                    Int(Zero::zero())
+                } else {
+                    let mut div = 2;
+                    let mut is_prime = true;
+                    while &(div * div).to_bigint().unwrap() <= &i {
+                        if &i % div == Zero::zero() {
+                            is_prime = false;
+                            break;
+                        }
+                        div += 1;
+                    }
+                    if is_prime {
+                        Int(One::one())
+                    } else {
+                        Int(Zero::zero())
+                    }
+                }
+            }
+            (Length, List(l)) => {
+                if l.iter().all(|elem| matches!(elem, Int(_))) {
+                    let mut total: BigInt = Zero::zero();
+                    for bit in l {
+                        if let Int(b) = bit {
+                            total *= 2;
+                            total += b
+                        }
+                    }
+                    Int(total)
+                } else {
+                    panic!("Unimplemented inverse l: {:?} {:?}", self, List(l));
+                }
+            }
+            (Sum, arg) => List(vec![arg]),
             (_, a @ Error(_)) => a,
             (s, a) => panic!("Basic inverse func unimplemented: {:?}, {:?}", s, a),
         }
@@ -415,39 +565,6 @@ enum HigherFunc {
     Repeat,
 }
 impl HigherFunc {
-    fn to_list(arg: Object) -> Vec<Object> {
-        use Object::*;
-        match arg {
-            Int(i) if i < Zero::zero() => {
-                let mut nums = vec![];
-                let mut j: BigInt = Zero::zero();
-                let target = -i;
-                loop {
-                    if &j == &target {
-                        break;
-                    }
-                    nums.push(Int(j.clone()));
-                    j += 1;
-                }
-                nums.reverse();
-                nums
-            }
-            Int(i) => {
-                let mut nums = vec![];
-                let mut j: BigInt = Zero::zero();
-                loop {
-                    if &j == &i {
-                        break;
-                    }
-                    nums.push(Int(j.clone()));
-                    j += 1;
-                }
-                nums
-            }
-            List(l) => l,
-            a @ Error(_) => panic!("to_list called on {:?}", a),
-        }
-    }
     fn first_error(mut arg: Vec<Object>) -> Object {
         let maybe_index = arg.iter().position(|elem| matches!(elem, Object::Error(_)));
         if let Some(index) = maybe_index {
@@ -459,22 +576,19 @@ impl HigherFunc {
     fn execute(&self, func: &Func, arg: Object) -> Object {
         use HigherFunc::*;
         use Object::*;
-        if matches! {arg, Error(_)} {
-            return arg;
-        }
         match self {
             Map => {
-                let list = HigherFunc::to_list(arg);
+                let list = arg.to_list();
                 let out_list = list.into_iter().map(|obj| func.execute(obj)).collect();
                 HigherFunc::first_error(out_list)
             }
             Filter => {
-                let mut list = HigherFunc::to_list(arg);
+                let mut list = arg.to_list();
                 list.retain(|obj| func.execute(obj.clone()).is_truthy());
                 List(list)
             }
             Order => {
-                let mut list = HigherFunc::to_list(arg);
+                let mut list = arg.to_list();
                 list.sort_by_key(|obj| {
                     let new_obj = func.execute(obj.clone());
                     new_obj.to_key()
@@ -522,7 +636,7 @@ impl HigherFunc {
                         if i < Zero::zero() {
                             List(vec![])
                         } else {
-                            let mut output = vec![start.clone()];
+                            let mut output = vec![];
                             let mut current = start;
                             let mut j: BigInt = Zero::zero();
                             while j < i {
@@ -543,14 +657,17 @@ impl HigherFunc {
         use Object::*;
         match self {
             Order => {
-                let list = HigherFunc::to_list(arg);
+                let list = arg.to_list();
                 let mut indices: Vec<usize> = (0..list.len()).collect();
                 indices.sort_by_key(|&i| func.execute(list[i].clone()).to_key());
                 let mut inverse_indices: Vec<Option<usize>> = vec![None; list.len()];
                 for (index, &perm) in indices.iter().enumerate() {
                     inverse_indices[perm] = Some(index);
                 }
-                let reordered = inverse_indices.iter().map(|i| list[i.unwrap()].clone()).collect();
+                let reordered = inverse_indices
+                    .iter()
+                    .map(|i| list[i.unwrap()].clone())
+                    .collect();
                 List(reordered)
             }
             Inverse => func.execute(arg),
@@ -845,7 +962,9 @@ fn lex(code: &str) -> Vec<Token> {
     let mut tokens: Vec<Token> = code
         .chars()
         .map(|c| match c {
+            'a' => Token::Basic(BasicFunc::AllPair),
             'b' => Token::Double(DoubleFunc::Bifurcate),
+            'c' => Token::Basic(BasicFunc::Combine),
             'e' => Token::Basic(BasicFunc::Equal),
             'f' => Token::Higher(HigherFunc::Filter),
             'h' => Token::Basic(BasicFunc::Head),

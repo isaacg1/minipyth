@@ -123,7 +123,7 @@ fn bifurcate_second_error() {
 
 #[test]
 fn transpose() {
-    let program = "pmm";
+    let program = "cmm";
     let input = int_to_obj(5);
     let desired_output = lli_to_obj(vec![vec![0, 0, 0, 0], vec![1, 1, 1], vec![2, 2], vec![3]]);
     let output = run_prog(program, input);
@@ -132,7 +132,7 @@ fn transpose() {
 
 #[test]
 fn transpose_mixed() {
-    let program = "pxm";
+    let program = "cxm";
     let input = int_to_obj(5);
     let desired_output = lli_to_obj(vec![vec![5, 0], vec![1], vec![2], vec![3], vec![4]]);
     let output = run_prog(program, input);
@@ -195,16 +195,11 @@ fn repeat_list() {
 }
 
 #[test]
-fn inv_double() {
+fn inverse_double() {
     let program = "irmh";
     let input = int_to_obj(3);
     let output = run_prog(program, input);
-    let desired_output = List(vec![
-        int_to_obj(3),
-        list_int_to_obj(vec![-1, 0, 1]),
-        list_int_to_obj(vec![-2, -1, 0]),
-        list_int_to_obj(vec![-3, -2, -1]),
-    ]);
+    let desired_output = lli_to_obj(vec![vec![-1, 0, 1], vec![-2, -1, 0], vec![-3, -2, -1]]);
     assert_eq!(desired_output, output);
 }
 
@@ -213,14 +208,14 @@ fn order_error() {
     let program = "ozrtmqbh";
     let input = int_to_obj(2);
     let output = run_prog(program, input);
-    if let List(list) = output {
-        assert_eq!(4, list.len());
-        assert_eq!(int_to_obj(2), list[0]);
-        assert_eq!(list_int_to_obj(vec![]), list[1]);
-        assert_eq!(list_int_to_obj(vec![1]), list[2]);
-        assert!(matches!(list[3], Error(_)));
-    } else {
-        panic!("{:?}", output)
+    match output {
+        List(list) => {
+            assert_eq!(3, list.len());
+            assert_eq!(list_int_to_obj(vec![]), list[0]);
+            assert_eq!(list_int_to_obj(vec![1]), list[1]);
+            assert!(matches!(list[2], Error(_)));
+        }
+        _ => panic!("{:?}", output),
     }
 }
 
@@ -238,7 +233,7 @@ fn repeat_one() {
     let program = "rhmhhhz";
     let input = int_to_obj(1);
     let output = run_prog(program, input);
-    let desired_output = list_int_to_obj(vec![3, 4, 5, 6]);
+    let desired_output = list_int_to_obj(vec![4, 5, 6]);
     assert_eq!(desired_output, output);
 }
 
@@ -266,5 +261,155 @@ fn inverse_order() {
     let input = int_to_obj(5);
     let output = run_prog(program, input);
     let desired_output = list_int_to_obj(vec![4, 0, 1, 2, 3]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn prime_factors() {
+    let program = "mp";
+    let input = list_int_to_obj(vec![0, 12, 25]);
+    let output = run_prog(program, input);
+    let desired_output = lli_to_obj(vec![vec![], vec![2, 2, 3], vec![5, 5]]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn combine_error() {
+    let program = "cist";
+    let input = list_int_to_obj(vec![]);
+    let output = run_prog(program, input);
+    assert!(matches!(output, Error(_)));
+}
+
+#[test]
+fn to_binary() {
+    let program = "mltz";
+    let input = int_to_obj(6);
+    let output = run_prog(program, input);
+    let desired_output = lli_to_obj(vec![
+        vec![1],
+        vec![0],
+        vec![1],
+        vec![1, 0],
+        vec![1, 1],
+        vec![1, 0, 0],
+    ]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn powerset_error() {
+    let program = "y";
+    let input = int_to_obj(-1);
+    let output = run_prog(program, input);
+    assert!(matches!(output, Error(_)));
+}
+
+#[test]
+fn all_pairs() {
+    let program = "abzmh";
+    let input = int_to_obj(5);
+    let output = run_prog(program, input);
+    let desired_output = lli_to_obj(vec![
+        vec![5, 1],
+        vec![5, 2],
+        vec![5, 3],
+        vec![5, 4],
+        vec![5, 5],
+    ]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn all_pairs_second() {
+    let program = "abmh";
+    let input = int_to_obj(5);
+    let output = run_prog(program, input);
+    let desired_output = lli_to_obj(vec![
+        vec![1, 5],
+        vec![2, 5],
+        vec![3, 5],
+        vec![4, 5],
+        vec![5, 5],
+    ]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn all_pairs_multi() {
+    let program = "amm";
+    let input = int_to_obj(3);
+    let output = run_prog(program, input);
+    let desired_output = List(vec![
+        List(vec![List(vec![list_int_to_obj(vec![]), int_to_obj(0)])]),
+        List(vec![
+            List(vec![list_int_to_obj(vec![]), int_to_obj(0)]),
+            List(vec![list_int_to_obj(vec![]), int_to_obj(1)]),
+        ]),
+    ]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn all_pairs_multi_int() {
+    let program = "asbzmm";
+    let input = int_to_obj(3);
+    let output = run_prog(program, input);
+    let desired_output = List(vec![
+        list_int_to_obj(vec![]),
+        lli_to_obj(vec![vec![3, 0]]),
+        lli_to_obj(vec![vec![3, 0], vec![3, 1]]),
+    ]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn all_pairs_multi_second() {
+    let program = "asbbm";
+    let input = int_to_obj(3);
+    let output = run_prog(program, input);
+    let desired_output = List(vec![
+        lli_to_obj(vec![vec![0, 3], vec![1, 3], vec![2, 3]]),
+        lli_to_obj(vec![vec![0, 3], vec![1, 3], vec![2, 3]]),
+    ]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn all_pairs_self() {
+    let program = "am";
+    let input = int_to_obj(2);
+    let output = run_prog(program, input);
+    let desired_output = List(vec![
+        List(vec![list_int_to_obj(vec![0, 1]), int_to_obj(0)]),
+        List(vec![list_int_to_obj(vec![0, 1]), int_to_obj(1)]),
+    ]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn all_pairs_int() {
+    let program = "a";
+    let input = int_to_obj(4);
+    let output = run_prog(program, input);
+    let desired_output = lli_to_obj(vec![vec![4, 0], vec![4, 1], vec![4, 2], vec![4, 3]]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn from_binary() {
+    let program = "ilm";
+    let input = int_to_obj(11);
+    let output = run_prog(program, input);
+    let desired_output = int_to_obj(2036);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn cartesian_product() {
+    let program = "pbmhm";
+    let input = int_to_obj(2);
+    let output = run_prog(program, input);
+    let desired_output = lli_to_obj(vec![vec![1, 0], vec![1, 1], vec![2, 0], vec![2, 1]]);
     assert_eq!(desired_output, output);
 }

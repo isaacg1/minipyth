@@ -18,6 +18,7 @@ fn primality() {
         "sttlfsiphzbihlqxtmh",
         "stlfspipbihlqtxtmh",
         "iphzbpmptmbq",
+        "ip",
     ];
     for program in programs {
         let func = parse(lex(program));
@@ -33,7 +34,11 @@ fn primality() {
 #[test]
 fn fibonacci() {
     // https://codegolf.stackexchange.com/questions/85
-    let programs = vec!["ihhhzxbthzqbshihqbzbhhzhm", "ihhzrbshbzbhhzhm"];
+    let programs = vec![
+        "ihhhzxbthzqbshihqbzbhhzhm",
+        "ihhzrbshbzbhhzhm",
+        "ihsrbshnbms",
+    ];
     for program in programs {
         let func = parse(lex(program));
         let mut fib_pair = (0, 1);
@@ -67,7 +72,8 @@ fn nesting() {
 
 #[test]
 fn reshaped() {
-    let program = "ttfepbxitxt";
+    // https://codegolf.stackexchange.com/questions/239788
+    let program = "ttfecbxitxt";
     let output = run_prog(program, list_int_to_obj(vec![0, 1, 2, 3, 4, 0, 1, 2]));
     let desired_output = List(vec![lli_to_obj(vec![vec![], vec![]])]);
     assert_eq!(desired_output, output);
@@ -75,8 +81,27 @@ fn reshaped() {
 
 #[test]
 fn anagram() {
+    // https://codegolf.stackexchange.com/questions/1294
     let program = "emo";
-    let output = run_prog(program, lli_to_obj(vec![vec![0, 1, 2, 3], vec![2, 3, 1, 0]]));
+    let output = run_prog(
+        program,
+        lli_to_obj(vec![vec![0, 1, 2, 3], vec![2, 3, 1, 0]]),
+    );
     let desired_output = int_to_obj(1);
     assert_eq!(desired_output, output);
+}
+
+#[test]
+fn sqrt() {
+    // OEIS: A196
+    let programs = vec!["smeboqcbmqpbhhqr", "lfeboqabmqpbhhq"];
+    for program in programs {
+        let func = parse(lex(program));
+        for i in 0..=10 {
+            let input = int_to_obj(i);
+            let output = func.execute(input);
+            let desired_output = int_to_obj((i as f64).sqrt() as i64);
+            assert_eq!(desired_output, output, "Input: {}, Program: {}", i, program);
+        }
+    }
 }
