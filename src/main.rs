@@ -230,6 +230,8 @@ enum BasicFunc {
     Equal,
     Combine,
     AllPair,
+    Constant,
+    Deduplicate,
 }
 
 impl BasicFunc {
@@ -365,6 +367,24 @@ impl BasicFunc {
                     List(output)
                 }
             }
+            (Combine, Int(i)) => {
+                let base = Int(i).to_list();
+                let mut perms = vec![(vec![], base.clone())];
+                for _ in 0..base.len() {
+                    let mut new_perms = vec![];
+                    for (part_perm, rem) in perms {
+                        for i in 0..rem.len() {
+                            let mut new_rem = rem.clone();
+                            let extract = new_rem.remove(i);
+                            let mut new_part = part_perm.clone();
+                            new_part.push(extract);
+                            new_perms.push((new_part, new_rem));
+                        }
+                    }
+                    perms = new_perms;
+                }
+                List(perms.into_iter().map(|(perm, _)| List(perm)).collect())
+            }
             (PowerSet, Int(i)) => {
                 if i < Zero::zero() {
                     // Rationals
@@ -416,6 +436,26 @@ impl BasicFunc {
                 } else {
                     Int(One::one())
                 }
+            }
+            (Equal, Int(i)) => {
+                let base = Int(i).to_list();
+                let mut perms = vec![(vec![], base.clone())];
+                let mut out = vec![vec![]];
+                for _ in 0..base.len() {
+                    let mut new_perms = vec![];
+                    for (part_perm, rem) in perms {
+                        for i in 0..rem.len() {
+                            let mut new_rem = rem.clone();
+                            let extract = new_rem.remove(i);
+                            let mut new_part = part_perm.clone();
+                            new_part.push(extract);
+                            new_perms.push((new_part.clone(), new_rem));
+                            out.push(new_part);
+                        }
+                    }
+                    perms = new_perms;
+                }
+                List(out.into_iter().map(List).collect())
             }
             (AllPair, List(l)) => {
                 if l.len() >= 2 && l.iter().skip(1).any(|elem| matches!(elem, List(_))) {
@@ -477,8 +517,42 @@ impl BasicFunc {
                         .collect(),
                 )
             }
+            (Constant, _) => Int(Zero::zero()),
+            (Deduplicate, List(l)) => {
+                let mut seen = HashSet::new();
+                let mut out = vec![];
+                for elem in l {
+                    if !seen.contains(&elem) {
+                        seen.insert(elem.clone());
+                        out.push(elem);
+                    }
+                }
+                List(out)
+            }
+            (Deduplicate, Int(i)) => {
+                if i == Zero::zero() {
+                    List(vec![])
+                } else {
+                    let base = Int(i).to_list();
+                    let mut partitions = vec![];
+                    let num_options = 2u64.pow((base.len() - 1) as u32);
+                    for split in 0..num_options {
+                        let mut part = vec![vec![base[0].clone()]];
+                        for split_pos in 0..(base.len() - 1) {
+                            let mask = 1 << split_pos;
+                            if mask & split > 0 {
+                                part.push(vec![]);
+                            }
+                            let part_len = part.len() - 1;
+                            part[part_len].push(base[split_pos + 1].clone());
+                        }
+                        partitions.push(List(part.into_iter().map(List).collect()));
+                    }
+                    List(partitions)
+                }
+
+            }
             (_, a @ Error(_)) => a,
-            (s, a) => panic!("Basic func unimplemented: {:?}, {:?}", s, a),
         }
     }
     fn inverse_execute(&self, arg: Object) -> Object {
@@ -564,6 +638,9 @@ enum HigherFunc {
     Inverse,
     Repeat,
     GroupBy,
+    Update,
+    ReverseLookup,
+    DeepIndex,
 }
 impl HigherFunc {
     fn first_error(mut arg: Vec<Object>) -> Object {
@@ -664,6 +741,104 @@ impl HigherFunc {
                 let vals = key_vals.into_iter().map(|(_, v)| List(v)).collect();
                 List(vals)
             }
+            Update => {
+                let list = arg.to_list();
+                if list.is_empty() {
+                    List(list)
+                } else {
+                    let (first, rest) = list.split_first().unwrap();
+                    let update_ints = match first {
+                        Int(i) => vec![i.clone()],
+                        List(l) => l
+                            .into_iter()
+                            .map(|elem| match elem {
+                                Int(i) => i.clone(),
+                                List(list) => list.len().to_bigint().unwrap(),
+                                Error(_) => Zero::zero(),
+                            })
+                            .collect(),
+                        Error(_) => vec![],
+                    };
+                    let updated_lists: Vec<Object> = rest
+                        .iter()
+                        .map(|elem| {
+                            let mut list = elem.clone().to_list();
+                            if !list.is_empty() {
+                                for int in &update_ints {
+                                    let big_index = ((int % list.len()) + list.len()) % list.len();
+                                    let index: usize =
+                                        big_index.to_usize().expect("big_index positive");
+                                    let new = func.execute(list[index].clone());
+                                    list[index] = new;
+                                }
+                            }
+                            List(list)
+                        })
+                        .collect();
+                    if updated_lists.len() == 1 {
+                        updated_lists[0].clone()
+                    } else {
+                        List(updated_lists)
+                    }
+                }
+            }
+            ReverseLookup => {
+                let mut combos: Vec<(i64, u32, i64)> = vec![(2, 2, 9)];
+                let mut output = None;
+                'outer: for i in 0.. {
+                    let pos_arg = Int(i.to_bigint().unwrap());
+                    if func.execute(pos_arg.clone()) == arg {
+                        output = Some(pos_arg);
+                        break;
+                    }
+                    let neg_arg = Int((-i).to_bigint().unwrap());
+                    if func.execute(neg_arg.clone()) == arg {
+                        output = Some(neg_arg);
+                        break;
+                    }
+                    if (combos[0].2) <= i {
+                        let (options, length, score) = combos.remove(0);
+                        for (new_options, new_length) in
+                            vec![(options + 1, length), (options, length + 1)]
+                        {
+                            let new_total = (new_options * 2 - 1).pow(new_length);
+                            combos.push((new_options, new_length, new_total));
+                        }
+                        combos.sort_by_key(|c| c.2);
+                        // TODO: factorize for higher depth lists.
+                        let base = options * 2 - 1;
+                        for index in 0..score {
+                            let digits: Vec<i64> = (0..length)
+                                .scan(index, |index, _| {
+                                    let digit = *index % base;
+                                    *index /= base;
+                                    Some((options - 1) - digit)
+                                })
+                                .collect();
+                            let digit_arg = List(
+                                digits
+                                    .into_iter()
+                                    .map(|digit| Int(digit.to_bigint().unwrap()))
+                                    .collect(),
+                            );
+                            if func.execute(digit_arg.clone()) == arg {
+                                output = Some(digit_arg);
+                                break 'outer;
+                            }
+                        }
+                    }
+                }
+                output.expect("Initialized in loop")
+            }
+            DeepIndex => {
+                if let List(list) = arg {
+                    let structure = func.execute(Int(list.len().to_bigint().unwrap()));
+                    let result = HigherFunc::deep_index(structure, list);
+                    result
+                } else {
+                    panic!("DeepIndex non-list arg unimplemented");
+                }
+            }
         }
     }
     fn inverse_execute(&self, func: &Func, arg: Object) -> Object {
@@ -689,6 +864,25 @@ impl HigherFunc {
                 let inv = Func::Higher(HigherFunc::Inverse, Box::new(func.clone()));
                 self.execute(&inv, arg)
             }
+        }
+    }
+    fn deep_index(structure: Object, list: Vec<Object>) -> Object {
+        use Object::*;
+        match structure {
+            Int(i) => {
+                let index = (((i % list.len()) + list.len()) % list.len())
+                    .to_usize()
+                    .expect("positive");
+                list[index].clone()
+            }
+            List(l) => {
+                let mapped = l
+                    .into_iter()
+                    .map(|elem| HigherFunc::deep_index(elem, list.clone()))
+                    .collect();
+                List(mapped)
+            }
+            Error(_) => structure,
         }
     }
 }
@@ -979,11 +1173,14 @@ fn lex(code: &str) -> Vec<Token> {
             'a' => Token::Basic(BasicFunc::AllPair),
             'b' => Token::Double(DoubleFunc::Bifurcate),
             'c' => Token::Basic(BasicFunc::Combine),
+            'd' => Token::Basic(BasicFunc::Deduplicate),
             'e' => Token::Basic(BasicFunc::Equal),
             'f' => Token::Higher(HigherFunc::Filter),
             'g' => Token::Higher(HigherFunc::GroupBy),
             'h' => Token::Basic(BasicFunc::Head),
             'i' => Token::Higher(HigherFunc::Inverse),
+            'j' => Token::Higher(HigherFunc::DeepIndex),
+            'k' => Token::Basic(BasicFunc::Constant),
             'l' => Token::Basic(BasicFunc::Length),
             'm' => Token::Higher(HigherFunc::Map),
             'n' => Token::Basic(BasicFunc::Negate),
@@ -993,6 +1190,8 @@ fn lex(code: &str) -> Vec<Token> {
             'r' => Token::Higher(HigherFunc::Repeat),
             's' => Token::Basic(BasicFunc::Sum),
             't' => Token::Basic(BasicFunc::Tail),
+            'u' => Token::Higher(HigherFunc::Update),
+            'v' => Token::Higher(HigherFunc::ReverseLookup),
             'w' => Token::Double(DoubleFunc::While),
             'x' => Token::Higher(HigherFunc::FixedPoint),
             'y' => Token::Basic(BasicFunc::PowerSet),

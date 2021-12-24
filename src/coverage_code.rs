@@ -422,3 +422,175 @@ fn repeat_weird() {
     let desired_output = lli_to_obj(vec![vec![], vec![]]);
     assert_eq!(desired_output, output);
 }
+
+#[test]
+fn update() {
+    let program = "unbtm";
+    let input = int_to_obj(5);
+    let output = run_prog(program, input);
+    let desired_output = list_int_to_obj(vec![0, 1, 2, 3, -4]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn update_empty() {
+    let program = "unm";
+    let input = int_to_obj(0);
+    let output = run_prog(program, input);
+    let desired_output = list_int_to_obj(vec![]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn update_multi() {
+    let program = "unbbhtm";
+    let input = int_to_obj(5);
+    let output = run_prog(program, input);
+    let desired_output = list_int_to_obj(vec![0, -1, 2, 3, -4]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn update_weird() {
+    let program = "uhbqrtbztmqm";
+    let input = int_to_obj(5);
+    let output = run_prog(program, input);
+    let desired_output = list_int_to_obj(vec![2, 2, 3, 4, 5]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn update_error() {
+    let program = "uhnrtbztm";
+    let input = int_to_obj(3);
+    let output = run_prog(program, input);
+    let desired_output = lli_to_obj(vec![vec![], vec![2], vec![1, 2]]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn constant() {
+    let program = "mkrtbztm";
+    let input = int_to_obj(3);
+    let output = run_prog(program, input);
+    let desired_output = list_int_to_obj(vec![0, 0, 0, 0]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn reverse_lookup() {
+    let program = "vpbq";
+    let input = int_to_obj(81);
+    let output = run_prog(program, input);
+    let desired_output = int_to_obj(9);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn reverse_lookup_neg() {
+    let program = "vpsbbq";
+    let input = int_to_obj(-125);
+    let output = run_prog(program, input);
+    let desired_output = int_to_obj(-5);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn reverse_lookup_list() {
+    let program = "mvp";
+    let input = int_to_obj(7);
+    let output = run_prog(program, input);
+    let desired_output = lli_to_obj(vec![
+        vec![0, 1],
+        vec![1, 1],
+        vec![1, 2],
+        vec![1, 3],
+        vec![2, 2],
+        vec![1, 5],
+        vec![2, 3],
+    ]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn deduplicate() {
+    let program = "dsmm";
+    let input = int_to_obj(5);
+    let output = run_prog(program, input);
+    let desired_output = list_int_to_obj(vec![0, 1, 2, 3]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn deep_index() {
+    let program = "jmm";
+    let input = list_int_to_obj(vec![4, 2, 0, 5]);
+    let output = run_prog(program, input);
+    let desired_output = lli_to_obj(vec![vec![], vec![4], vec![4, 2], vec![4, 2, 0]]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn deep_error() {
+    let program = "jrtbhmqnm";
+    let input = int_to_obj(3);
+    let output = run_prog(program, input);
+    match output {
+        List(list) => {
+            assert_eq!(4, list.len());
+            assert_eq!(list_int_to_obj(vec![1, 0]), list[0]);
+            assert_eq!(list_int_to_obj(vec![0]), list[1]);
+            assert_eq!(list_int_to_obj(vec![]), list[2]);
+            assert!(matches!(list[3], Error(_)));
+        }
+        _ => panic!("{:?}", output),
+    }
+}
+
+#[test]
+fn permutations() {
+    let program = "c";
+    let input = int_to_obj(3);
+    let output = run_prog(program, input);
+    let desired_output = lli_to_obj(vec![
+        vec![0, 1, 2],
+        vec![0, 2, 1],
+        vec![1, 0, 2],
+        vec![1, 2, 0],
+        vec![2, 0, 1],
+        vec![2, 1, 0],
+    ]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn partitions() {
+    let program = "d";
+    let input = int_to_obj(3);
+    let output = run_prog(program, input);
+    let desired_output = List(vec![
+        lli_to_obj(vec![vec![0, 1, 2]]),
+        lli_to_obj(vec![vec![0], vec![1, 2]]),
+        lli_to_obj(vec![vec![0, 1], vec![2]]),
+        lli_to_obj(vec![vec![0], vec![1], vec![2]]),
+    ]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn partitions_empty() {
+    let program = "d";
+    let input = int_to_obj(0);
+    let output = run_prog(program, input);
+    let desired_output = list_int_to_obj(vec![]);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn subset_permutations() {
+    let program = "e";
+    let input = int_to_obj(2);
+    let output = run_prog(program, input);
+    let desired_output = lli_to_obj(vec![vec![], vec![0], vec![1], vec![0, 1], vec![1, 0]]);
+    assert_eq!(desired_output, output);
+}

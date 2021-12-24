@@ -120,3 +120,12 @@ fn group_by_displacement() {
     ]);
     assert_eq!(desired_output, output);
 }
+
+#[test]
+fn even_subarrays() {
+    let program = "smsihlsqfzsmxitxt";
+    let input = list_int_to_obj(vec![0, 6, 6, 5, 3, 3, 8]);
+    let output = run_prog(program, input);
+    let desired_output = int_to_obj(13);
+    assert_eq!(desired_output, output);
+}

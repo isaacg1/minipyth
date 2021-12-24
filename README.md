@@ -1,6 +1,6 @@
 # Minipyth
 
-Minipyth is a new programming language,
+Minipyth is a minimal programming language,
 inspired by [Pyth](https://github.com/isaacg1/pyth).
 Minipyth is intended to be
 programmed from my phone.
@@ -21,6 +21,8 @@ Minipyth lacks:
 * Functions of arity other than 1.
 
 * General control flow primitives.
+
+* Strings, floats, etc. Minipyth only has ints and lists.
 
 Now that we know what Minipyth lacks, let's talk about its features.
 
@@ -111,17 +113,20 @@ Sometimes, functions need to output a truth value.
 
 # Language reference
 
-Updated: 2021-12-22
+Updated: 2021-12-23
 
 | chars | mnemonic | Type | Function |
 | ----- | -------- | ---- | -------- |
 | a | all-pairs | basic | Given [x, [a, b, c, ...]], create [[x, a], [x, b], ...]. Given [[a, b, c, ...], int], create [[a, int], [b, int], ...]. Given list of ints l, same as [l, l]. Given int i, [[i, 0], [i, 1], ..., [i, i-1]]. |
 | b | bifurcate | higher-2 | Given two funcs, apply each to input, make list. |
-| c | combine | basic | Transponse list. Int unimplemented. |
-| e | equal | basic | Given a list, check if all elements identical. Int unimplemented. |
+| c | combine | basic | Transponse list. Int: permutations. |
+| d | deduplicate | basic | Remove all repeated elements. Int: partitions. |
+| e | equal | basic | Given a list, check if all elements identical. Int: subset permutations. |
 | f | filter | higher | to_list: filter func over list |
 | h | head | basic | Int: x+1. List: first element |
 | i | inverse | higher | Invert. Defined case-by-case. |
+| j | deep-index | higher | Given list and func, apply func to list length, then deep index the result into the input. Int unimplemented. |
+| k | constant | basic | 0 |
 | l | length | basic | List: length. Int: To binary. |
 | m | map | higher | to_list: map func over list. |
 | n | negate | basic | Int: -x. List: reverse | 
@@ -131,6 +136,8 @@ Updated: 2021-12-22
 | r | repeat | higher | Apply func a number of times equal to input[0], starting with input[1]. Return all results. If input is length 1 or non-list, use input as both times and start.
 | s | sum | basic | Int: logical negation. List(Int): integer sum. List(List): concatenate |
 | t | tail | basic | Int: x-1. List: All but first element |
+| u | update | higher | Given [i, list] and func, update list[i] using func. |
+| v | reverse-lookup | higher | Find first input to func that produces arg as output. |
 | w | while | higher-2 | Apply second func until first func returns falsy or error. Return starting value and all results.
 | x | fixed-point | higher | Apply until result repeats or errors. Return all results. |
 | y | power-set | basic | Int: 2^x. List: power-set |
