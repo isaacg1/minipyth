@@ -10,7 +10,7 @@ Additionally, Minipyth is a golfy language:
 Each character is an independent atom of the language.
 Ideally, anything can be programmed using a short program.
 
-To run a minipyth program, you can simply run:
+To run a Minipyth program, you can simply run:
 
     cargo run <program> <input>
 
