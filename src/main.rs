@@ -37,7 +37,7 @@ impl Func {
             Double(double_func, func1, func2) => double_func.inverse_execute(func1, func2, arg),
             Bound(funcs) => {
                 let mut working_obj = arg;
-                for func in funcs {
+                for func in funcs.iter().rev() {
                     working_obj = func.inverse_execute(working_obj);
                 }
                 working_obj
@@ -550,7 +550,6 @@ impl BasicFunc {
                     }
                     List(partitions)
                 }
-
             }
             (_, a @ Error(_)) => a,
         }

@@ -14,10 +14,10 @@ fn make_2014() {
 fn primality() {
     // https://codegolf.stackexchange.com/questions/57617
     let programs = vec![
-        "stlfsmqiphzbihlqtnwttmh",
-        "sttlfsiphzbihlqxtmh",
+        "stlfsmqihpzbihlqtnwttmh",
+        "sttlfsihpzbihlqxtmh",
         "stlfspipbihlqtxtmh",
-        "iphzbpmptmbq",
+        "ihpzbpmptmbq",
         "ip",
     ];
     for program in programs {
@@ -26,7 +26,7 @@ fn primality() {
             let output = func.execute(int_to_obj(i));
             let is_prime = (2..i).all(|div| i % div != 0) && i > 1;
             let desired_output = int_to_obj(if is_prime { 1 } else { 0 });
-            assert_eq!(desired_output, output, "Input: {}", i);
+            assert_eq!(desired_output, output, "Input: {}, Program: {}", i, program);
         }
     }
 }
