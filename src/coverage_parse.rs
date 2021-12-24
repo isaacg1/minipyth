@@ -177,3 +177,59 @@ fn double_half_quote() {
     )];
     assert_eq!(funcs, Func::Bound(desired_funcs));
 }
+#[test]
+fn quote_alone() {
+    let program = "mhqboqnm";
+    let funcs = parse(lex(program));
+    let desired_funcs = vec![
+        Func::Higher(HigherFunc::Map, Box::new(Func::Basic(BasicFunc::Head))),
+        Func::Bound(vec![Func::Double(
+            DoubleFunc::Bifurcate,
+            Box::new(Func::Higher(
+                HigherFunc::Order,
+                Box::new(Func::Bound(vec![])),
+            )),
+            Box::new(Func::Bound(vec![])),
+        )]),
+        Func::Basic(BasicFunc::Negate),
+        Func::Higher(HigherFunc::Map, Box::new(Func::Bound(vec![]))),
+    ];
+    assert_eq!(funcs, Func::Bound(desired_funcs));
+}
+#[test]
+fn quote_alone_single() {
+    let program = "hqboqnm";
+    let funcs = parse(lex(program));
+    let desired_funcs = vec![
+        Func::Basic(BasicFunc::Head),
+        Func::Bound(vec![Func::Double(
+            DoubleFunc::Bifurcate,
+            Box::new(Func::Higher(
+                HigherFunc::Order,
+                Box::new(Func::Bound(vec![])),
+            )),
+            Box::new(Func::Bound(vec![])),
+        )]),
+        Func::Basic(BasicFunc::Negate),
+        Func::Higher(HigherFunc::Map, Box::new(Func::Bound(vec![]))),
+    ];
+    assert_eq!(funcs, Func::Bound(desired_funcs));
+}
+#[test]
+fn quote_alone_front() {
+    let program = "qboqnm";
+    let funcs = parse(lex(program));
+    let desired_funcs = vec![
+        Func::Bound(vec![Func::Double(
+            DoubleFunc::Bifurcate,
+            Box::new(Func::Higher(
+                HigherFunc::Order,
+                Box::new(Func::Bound(vec![])),
+            )),
+            Box::new(Func::Bound(vec![])),
+        )]),
+        Func::Basic(BasicFunc::Negate),
+        Func::Higher(HigherFunc::Map, Box::new(Func::Bound(vec![]))),
+    ];
+    assert_eq!(funcs, Func::Bound(desired_funcs));
+}

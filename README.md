@@ -14,9 +14,18 @@ To run a Minipyth program, you can simply run:
 
     cargo run <program> <input>
 
-Input is optional, defaults to 0.
+For higher performance, run
+
+    cargo run --release -- <program> <input>
 
 You'll need rust installed, here's the instructions to do so: https://www.rust-lang.org/learn/get-started
+
+Input is optional, defaults to 0.
+
+Two potentially useful flags are `--debug`, which prints the parse tree,
+and `--pretty`, which pretty-prints the output.
+
+# About Minipyth
 
 Minipyth is a highly minimalistic language,
 and intentionally lacks many features that are taken for granted in other languages.

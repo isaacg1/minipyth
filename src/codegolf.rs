@@ -123,9 +123,20 @@ fn group_by_displacement() {
 
 #[test]
 fn even_subarrays() {
+    // https://codegolf.stackexchange.com/questions
     let program = "smsihlsqfzsmxitxt";
     let input = list_int_to_obj(vec![0, 6, 6, 5, 3, 3, 8]);
     let output = run_prog(program, input);
     let desired_output = int_to_obj(13);
+    assert_eq!(desired_output, output);
+}
+
+#[test]
+fn distinct_distances() {
+    // https://codegolf.stackexchange.com/questions/237841
+    let program = "iholfebdzzmqsmpmbqmqmscumnbkqfqseboqqpbqzypcmb";
+    let input = int_to_obj(2);
+    let output = run_prog(program, input);
+    let desired_output = lli_to_obj(vec![vec![1, 0], vec![1, 1]]);
     assert_eq!(desired_output, output);
 }

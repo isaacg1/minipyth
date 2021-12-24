@@ -222,7 +222,8 @@ impl Object {
                     for elem in l {
                         pieces.push("\n    ".to_string());
                         let sub = elem.to_pretty(length_cap - 4);
-                        let indented = sub.replace("\n", "\n    ");
+                        let mut indented = sub.replace("\n", "\n    ");
+                        indented.push(',');
                         pieces.push(indented);
                     }
                     pieces.push("\n]".to_string());
@@ -1079,13 +1080,26 @@ fn parse(tokens: Vec<Token>) -> Func {
                                                 state.push(HOF::Func(new_func));
                                                 break;
                                             }
-                                            _ => panic!("Paired quote in front of func, not in legal position: {:?} {:?} {:?}", state, func, second_last_state),
+                                            Some(elem) => {
+                                                state.push(elem);
+                                                state.push(HOF::Func(func));
+                                                state.push(HOF::Func(bound_func));
+                                                break;
+                                            }
+                                            None => {
+                                                state.push(HOF::Func(func));
+                                                state.push(HOF::Func(bound_func));
+                                                break;
+                                            }
                                         }
                                     }
-                                    _ => panic!(
-                                        "Paired quote not in legal position: {:?} {:?}",
-                                        state, last_state
-                                    ),
+                                    Some(HOF::Quote) => {
+                                        unreachable!("Quotes eliminated left to right");
+                                    }
+                                    None => {
+                                        state.push(HOF::Func(bound_func));
+                                        break;
+                                    }
                                 }
                             }
                             Some(HOF::Higher(higher_func)) => {
