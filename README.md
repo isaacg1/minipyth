@@ -10,6 +10,14 @@ Additionally, Minipyth is a golfy language:
 Each character is an independent atom of the language.
 Ideally, anything can be programmed using a short program.
 
+To run a minipyth program, you can simply run:
+
+    cargo run <program> <input>
+
+Input is optional, defaults to 0.
+
+You'll need rust installed, here's the instructions to do so: https://www.rust-lang.org/learn/get-started
+
 Minipyth is a highly minimalistic language,
 and intentionally lacks many features that are taken for granted in other languages.
 Minipyth lacks:
