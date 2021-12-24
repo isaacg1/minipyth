@@ -208,6 +208,30 @@ impl Object {
             a @ Error(_) => panic!("to_list called on {:?}", a),
         }
     }
+    fn to_pretty(&self, length_cap: usize) -> String {
+        use Object::*;
+        match self {
+            Int(_) => format!("{}", self),
+            List(l) => {
+                let basic = format!("{}", self);
+                if basic.len() <= length_cap || length_cap <= 40 {
+                    basic
+                } else {
+                    let mut pieces = vec![];
+                    pieces.push("[".to_string());
+                    for elem in l {
+                        pieces.push("\n    ".to_string());
+                        let sub = elem.to_pretty(length_cap - 4);
+                        let indented = sub.replace("\n", "\n    ");
+                        pieces.push(indented);
+                    }
+                    pieces.push("\n]".to_string());
+                    pieces.join(" ")
+                }
+            }
+            Error(_) => format!("{}", self),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -333,6 +357,8 @@ impl BasicFunc {
             (Combine, List(l)) => {
                 if let Some(first_error) = l.iter().filter(|elem| matches!(elem, Error(_))).next() {
                     first_error.clone()
+                } else if l.is_empty() {
+                    List(vec![])
                 } else {
                     let longest = l
                         .iter()
@@ -1212,7 +1238,7 @@ fn lex(code: &str) -> Vec<Token> {
     tokens
 }
 
-fn run(program: &str, maybe_input: Option<&str>, debug: bool) -> String {
+fn run(program: &str, maybe_input: Option<&str>, debug: bool, pretty: bool) -> String {
     let tokens = lex(program);
     let func = parse(tokens);
     if debug {
@@ -1220,8 +1246,12 @@ fn run(program: &str, maybe_input: Option<&str>, debug: bool) -> String {
     }
     let input = maybe_input.unwrap_or("0");
     let parsed_input: Object = Object::from_str(input);
-    let output = func.execute(parsed_input);
-    format!("{}", output)
+    let object = func.execute(parsed_input);
+    if !pretty {
+        format!("{}", object)
+    } else {
+        object.to_pretty(80)
+    }
 }
 
 fn main() {
@@ -1241,11 +1271,18 @@ fn main() {
                 .long("debug")
                 .help("Prints parse tree"),
         )
+        .arg(
+            Arg::with_name("PRETTY")
+                .short("p")
+                .long("pretty")
+                .help("Pretty-print the output"),
+        )
         .get_matches();
     let program = matches.value_of("PROGRAM").unwrap();
     let debug = matches.is_present("DEBUG");
     let input = matches.value_of("INPUT");
-    let result = run(program, input, debug);
+    let pretty = matches.is_present("PRETTY");
+    let result = run(program, input, debug, pretty);
     println!("{}", result);
 }
 

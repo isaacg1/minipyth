@@ -594,3 +594,12 @@ fn subset_permutations() {
     let desired_output = lli_to_obj(vec![vec![], vec![0], vec![1], vec![0, 1], vec![1, 0]]);
     assert_eq!(desired_output, output);
 }
+
+#[test]
+fn combine_empty() {
+    let program = "mcmm";
+    let input = int_to_obj(2);
+    let output = run_prog(program, input);
+    let desired_output = List(vec![lli_to_obj(vec![]), lli_to_obj(vec![vec![0]])]);
+    assert_eq!(desired_output, output);
+}
